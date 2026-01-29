@@ -2,53 +2,75 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ULTIMATE IMPACT</title>
+    <title>PULL & PUSH CANNON</title>
     <style>
-        body { background: #000; color: #fff; text-align: center; font-family: 'Impact', sans-serif; display: flex; flex-direction: column; justify-content: center; height: 100vh; margin: 0; }
-        .power-btn { 
-            width: 300px; height: 300px; border-radius: 50%;
-            background: linear-gradient(145deg, #ff0000, #880000);
-            border: 15px solid #fff; color: white; font-size: 4rem;
-            cursor: pointer; box-shadow: 0 0 100px #f00;
+        body { background: #000; color: #0f0; text-align: center; font-family: 'Arial Black', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .cannon-frame { border: 10px double #0f0; padding: 40px; border-radius: 20px; box-shadow: 0 0 30px #0f0; }
+        .fire-btn { 
+            width: 200px; height: 200px; border-radius: 50%; border: none;
+            background: #0f0; color: #000; font-size: 2.5rem; font-weight: bold;
+            cursor: pointer; box-shadow: 0 0 20px #0f0;
         }
-        .power-btn:active { transform: scale(0.9); filter: brightness(2); }
-        #log { margin-top: 20px; color: #f00; font-size: 1.2rem; }
+        .fire-btn:active { transform: scale(0.8); background: #fff; }
+        #indicator { margin-top: 20px; font-size: 1.5rem; height: 1.5rem; }
     </style>
 </head>
 <body>
 
-    <button class="power-btn" id="impactBtn">極</button>
-    <div id="log">STANDBY... (VOLUME MAX RECOMMENDED)</div>
+    <div class="cannon-frame">
+        <div id="indicator">READY</div>
+        <button class="fire-btn" id="fireBtn">PUSH</button>
+    </div>
 
     <script>
         let audioCtx;
-        const btn = document.getElementById('impactBtn');
+        const btn = document.getElementById('fireBtn');
+        const indicator = document.getElementById('indicator');
 
         btn.onclick = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             
-            // 物理的に最も衝撃が強い「ステップ波形」を生成
-            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+            // 物理衝撃プロセッサ
+            const bufferSize = audioCtx.sampleRate * 0.2;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
 
-            // 0.005秒間だけ、スピーカーを「押し切る」ための最大出力を固定
-            // これが「ハンマーで叩く」ような衝撃を生みます
-            for (let i = 0; i < 200; i++) {
+            // 1. 「引き」のフェーズ (コーンを奥へ)
+            const pullDuration = 2000; // サンプル数
+            for (let i = 0; i < pullDuration; i++) {
+                data[i] = -1.0; 
+            }
+
+            // 2. 「押し」のフェーズ (一気に射出)
+            const pushStart = pullDuration;
+            const pushDuration = 500; 
+            for (let i = pushStart; i < pushStart + pushDuration; i++) {
                 data[i] = 1.0; 
             }
 
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
-
             const gain = audioCtx.createGain();
-            // ブラウザのリミッターを完全に無視する超高倍率
-            gain.gain.setValueAtTime(50.0, audioCtx.currentTime); 
+
+            // 外部スピーカーを無理やり動かすための過剰ゲイン
+            gain.gain.setValueAtTime(100.0, audioCtx.currentTime); 
 
             source.connect(gain);
             gain.connect(audioCtx.destination);
-            
+
             source.start();
-            document.getElementById('log').textContent = "MAX IMPACT RELEASED!";
+
+            // アニメーション演出
+            indicator.textContent = "PULLING...";
+            indicator.style.color = "#f00";
+            setTimeout(() => {
+                indicator.textContent = "PUSH!!!";
+                indicator.style.color = "#fff";
+                setTimeout(() => {
+                    indicator.textContent = "READY";
+                    indicator.style.color = "#0f0";
+                }, 200);
+            }, 50);
         };
     </script>
 </body>
