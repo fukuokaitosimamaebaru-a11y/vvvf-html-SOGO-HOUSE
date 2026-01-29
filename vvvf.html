@@ -2,113 +2,78 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>SHINDO 7 - MAXIMUM QUAKE</title>
+    <title>EXTERNAL MAX LEVEL</title>
     <style>
-        body { 
-            margin: 0; background: #000; color: #fff; 
-            font-family: 'Courier New', Courier, monospace;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            height: 100vh; overflow: hidden;
+        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; text-align: center; overflow: hidden; height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+        .monitor { font-size: 1.2rem; margin-bottom: 20px; color: #00ff00; text-transform: uppercase; }
+        #freq-display { font-size: 4rem; font-weight: bold; }
+        button { 
+            padding: 40px 80px; font-size: 2rem; background: transparent; 
+            color: #00ff00; border: 3px solid #00ff00; cursor: pointer;
+            box-shadow: 0 0 20px #00ff00; transition: 0.1s;
         }
-        #warning-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255, 0, 0, 0.2); pointer-events: none; opacity: 0;
-        }
-        h1 { font-size: 4rem; margin: 0; color: #ff0000; text-shadow: 0 0 20px #f00; }
-        button {
-            padding: 40px 80px; font-size: 2rem; font-weight: bold;
-            background: #ff0000; color: #fff; border: 5px solid #fff;
-            cursor: pointer; transition: 0.1s; z-index: 100;
-        }
-        button:hover { background: #fff; color: #ff0000; }
-        .shaking { animation: seismic 0.04s infinite; }
-        @keyframes seismic {
-            0% { transform: translate(4px, 4px) rotate(0deg); }
-            25% { transform: translate(-4px, -4px) rotate(1deg); }
-            50% { transform: translate(4px, -4px) rotate(-1deg); }
-            75% { transform: translate(-4px, 4px) rotate(0deg); }
-            100% { transform: translate(4px, 4px) rotate(0deg); }
-        }
+        button:active { background: #00ff00; color: #000; }
+        .vibration-bg { position: fixed; top:0; left:0; width:100%; height:100%; z-index:-1; background: repeating-linear-gradient(0deg, #111 0px, #000 2px); }
     </style>
 </head>
 <body>
-
-    <div id="warning-screen"></div>
-    <h1 id="status">SHINDO 7</h1>
-    <p>OBJECTS MAY FALL - PROTECT YOUR HEAD</p>
-    <button id="quakeBtn">QUAKE START</button>
+    <div class="vibration-bg"></div>
+    <div class="monitor">Target: External Speaker Output</div>
+    <div id="freq-display">00.00 Hz</div>
+    <div class="monitor">Status: <span id="status">Ready</span></div>
+    <br>
+    <button id="startBtn">FORCE OUTPUT</button>
 
     <script>
         let audioCtx;
-        let isPlaying = false;
-        let timer;
+        let osc;
+        let gainNode;
+        let isRunning = false;
+        let sweepTimer;
 
-        const btn = document.getElementById('quakeBtn');
-        const status = document.getElementById('status');
-        const warning = document.getElementById('warning-screen');
-
-        const startQuake = () => {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-            // 1. メインの揺れ（オシレーター）
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'square'; 
-            gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
-
-            // 2. 地鳴りノイズ（ブラウンノイズ）
-            const bufferSize = 2 * audioCtx.sampleRate;
-            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-            const output = noiseBuffer.getChannelData(0);
-            let lastOut = 0;
-            for (let i = 0; i < bufferSize; i++) {
-                let white = Math.random() * 2 - 1;
-                output[i] = (lastOut + (0.02 * white)) / 1.02;
-                lastOut = output[i];
-                output[i] *= 3.5; // 音量を増幅
-            }
-            const noise = audioCtx.createBufferSource();
-            noise.buffer = noiseBuffer;
-            noise.loop = true;
-            const noiseGain = audioCtx.createGain();
-            noiseGain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-
-            // 3. 不規則な揺れの変調
-            timer = setInterval(() => {
-                const randomFreq = Math.random() * 50 + 10; // 10Hz-60Hz
-                osc.frequency.exponentialRampToValueAtTime(randomFreq, audioCtx.currentTime + 0.05);
-            }, 50);
-
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            noise.connect(noiseGain);
-            noiseGain.connect(audioCtx.destination);
-
-            osc.start();
-            noise.start();
-
-            return { osc, noise, stop: () => {
-                osc.stop();
-                noise.stop();
-                clearInterval(timer);
-            }};
-        };
-
-        let quakeInstance;
+        const btn = document.getElementById('startBtn');
+        const freqDisp = document.getElementById('freq-display');
+        const statusDisp = document.getElementById('status');
 
         btn.addEventListener('click', () => {
-            if (!isPlaying) {
-                quakeInstance = startQuake();
-                document.body.classList.add('shaking');
-                warning.style.opacity = "1";
-                btn.textContent = "STOP QUAKE";
-                isPlaying = true;
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            if (!isRunning) {
+                osc = audioCtx.createOscillator();
+                gainNode = audioCtx.createGain();
+
+                // 外部スピーカーを最も揺らす「ノコギリ波」を採用
+                osc.type = 'sawtooth';
+                
+                // 音量を出力限界まで（ブースト込み）
+                gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
+
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                // 周波数を20Hz〜50Hzの間でゆっくり往復（共振点を探す）
+                let f = 20;
+                let direction = 1;
+                sweepTimer = setInterval(() => {
+                    if (f >= 50) direction = -1;
+                    if (f <= 20) direction = 1;
+                    f += 0.1 * direction;
+                    osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+                    freqDisp.textContent = f.toFixed(2) + " Hz";
+                }, 20);
+
+                osc.start();
+                statusDisp.textContent = "EMITTING...";
+                btn.textContent = "TERMINATE";
+                isRunning = true;
             } else {
-                quakeInstance.stop();
-                document.body.classList.remove('shaking');
-                warning.style.opacity = "0";
-                btn.textContent = "QUAKE START";
-                isPlaying = false;
+                osc.stop();
+                clearInterval(sweepTimer);
+                statusDisp.textContent = "Ready";
+                btn.textContent = "FORCE OUTPUT";
+                isRunning = false;
             }
         });
     </script>
