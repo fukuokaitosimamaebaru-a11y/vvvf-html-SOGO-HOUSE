@@ -2,80 +2,89 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>EXTERNAL MAX LEVEL</title>
+    <title>RESONANCE LOCK - MAX</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; text-align: center; overflow: hidden; height: 100vh; display: flex; flex-direction: column; justify-content: center; }
-        .monitor { font-size: 1.2rem; margin-bottom: 20px; color: #00ff00; text-transform: uppercase; }
-        #freq-display { font-size: 4rem; font-weight: bold; }
-        button { 
-            padding: 40px 80px; font-size: 2rem; background: transparent; 
-            color: #00ff00; border: 3px solid #00ff00; cursor: pointer;
-            box-shadow: 0 0 20px #00ff00; transition: 0.1s;
+        body { 
+            background: #000; color: #ff0000; font-family: 'Arial Black', sans-serif;
+            text-align: center; height: 100vh; display: flex; flex-direction: column; justify-content: center;
         }
-        button:active { background: #00ff00; color: #000; }
-        .vibration-bg { position: fixed; top:0; left:0; width:100%; height:100%; z-index:-1; background: repeating-linear-gradient(0deg, #111 0px, #000 2px); }
+        .display { font-size: 5rem; text-shadow: 0 0 20px #f00; margin: 20px 0; }
+        .controls { margin: 20px; }
+        input[type=range] { width: 80%; height: 20px; cursor: pointer; }
+        .adjust-btns button { 
+            padding: 15px 30px; font-size: 1.5rem; margin: 5px;
+            background: #222; color: #ff0000; border: 2px solid #ff0000; cursor: pointer;
+        }
+        #mainBtn { 
+            padding: 40px 100px; font-size: 2.5rem; background: #ff0000; color: #000;
+            border: none; border-radius: 50px; cursor: pointer; font-weight: bold;
+            box-shadow: 0 0 40px #f00;
+        }
     </style>
 </head>
 <body>
-    <div class="vibration-bg"></div>
-    <div class="monitor">Target: External Speaker Output</div>
-    <div id="freq-display">00.00 Hz</div>
-    <div class="monitor">Status: <span id="status">Ready</span></div>
-    <br>
-    <button id="startBtn">FORCE OUTPUT</button>
+
+    <div class="display"><span id="freqVal">30.0</span>Hz</div>
+    
+    <div class="controls">
+        <input type="range" id="freqSlider" min="10" max="100" step="0.1" value="30.0">
+        <div class="adjust-btns">
+            <button onclick="adjust(-1)">-1Hz</button>
+            <button onclick="adjust(-0.1)">-0.1Hz</button>
+            <button onclick="adjust(0.1)">+0.1Hz</button>
+            <button onclick="adjust(1)">+1Hz</button>
+        </div>
+    </div>
+
+    <button id="mainBtn">LOCK ON / START</button>
 
     <script>
-        let audioCtx;
-        let osc;
-        let gainNode;
-        let isRunning = false;
-        let sweepTimer;
+        let audioCtx, osc, gainNode, isRunning = false;
+        const freqVal = document.getElementById('freqVal');
+        const freqSlider = document.getElementById('freqSlider');
+        const mainBtn = document.getElementById('mainBtn');
 
-        const btn = document.getElementById('startBtn');
-        const freqDisp = document.getElementById('freq-display');
-        const statusDisp = document.getElementById('status');
+        function updateFreq(val) {
+            const f = parseFloat(val).toFixed(1);
+            freqVal.textContent = f;
+            freqSlider.value = f;
+            if (osc) osc.frequency.setTargetAtTime(f, audioCtx.currentTime, 0.01);
+        }
 
-        btn.addEventListener('click', () => {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
+        function adjust(amt) {
+            updateFreq(parseFloat(freqSlider.value) + amt);
+        }
+
+        freqSlider.oninput = (e) => updateFreq(e.target.value);
+
+        mainBtn.onclick = () => {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
             if (!isRunning) {
                 osc = audioCtx.createOscillator();
                 gainNode = audioCtx.createGain();
-
-                // 外部スピーカーを最も揺らす「ノコギリ波」を採用
-                osc.type = 'sawtooth';
                 
-                // 音量を出力限界まで（ブースト込み）
+                // 最も押し出しの強い「矩形波」に固定
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freqSlider.value, audioCtx.currentTime);
+                
+                // 外部スピーカーを振り切らせるための最大ゲイン
                 gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
 
                 osc.connect(gainNode);
                 gainNode.connect(audioCtx.destination);
-
-                // 周波数を20Hz〜50Hzの間でゆっくり往復（共振点を探す）
-                let f = 20;
-                let direction = 1;
-                sweepTimer = setInterval(() => {
-                    if (f >= 50) direction = -1;
-                    if (f <= 20) direction = 1;
-                    f += 0.1 * direction;
-                    osc.frequency.setValueAtTime(f, audioCtx.currentTime);
-                    freqDisp.textContent = f.toFixed(2) + " Hz";
-                }, 20);
-
                 osc.start();
-                statusDisp.textContent = "EMITTING...";
-                btn.textContent = "TERMINATE";
+                
+                mainBtn.textContent = "STOP";
+                mainBtn.style.background = "#444";
                 isRunning = true;
             } else {
                 osc.stop();
-                clearInterval(sweepTimer);
-                statusDisp.textContent = "Ready";
-                btn.textContent = "FORCE OUTPUT";
                 isRunning = false;
+                mainBtn.textContent = "LOCK ON / START";
+                mainBtn.style.background = "#ff0000";
             }
-        });
+        };
     </script>
 </body>
 </html>
