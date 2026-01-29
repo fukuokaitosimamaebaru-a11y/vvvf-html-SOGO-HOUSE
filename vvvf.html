@@ -2,89 +2,92 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>RESONANCE LOCK - MAX</title>
+    <title>BOLT CANNON - ULTIMATE</title>
     <style>
-        body { 
-            background: #000; color: #ff0000; font-family: 'Arial Black', sans-serif;
-            text-align: center; height: 100vh; display: flex; flex-direction: column; justify-content: center;
+        body { background: #000; color: #fff; text-align: center; font-family: 'Impact', sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+        .trigger-area { position: relative; width: 300px; height: 300px; margin: 0 auto; }
+        .fire-btn { 
+            width: 250px; height: 250px; border-radius: 50%;
+            background: radial-gradient(circle, #ff0000 0%, #330000 100%);
+            border: 8px solid #555; color: #fff; font-size: 3rem; font-weight: bold;
+            cursor: pointer; box-shadow: 0 10px 40px rgba(255, 0, 0, 0.6);
+            transition: 0.1s; position: absolute; top: 25px; left: 25px; z-index: 10;
         }
-        .display { font-size: 5rem; text-shadow: 0 0 20px #f00; margin: 20px 0; }
-        .controls { margin: 20px; }
-        input[type=range] { width: 80%; height: 20px; cursor: pointer; }
-        .adjust-btns button { 
-            padding: 15px 30px; font-size: 1.5rem; margin: 5px;
-            background: #222; color: #ff0000; border: 2px solid #ff0000; cursor: pointer;
+        .fire-btn:active { transform: scale(0.95); box-shadow: 0 0 80px #f00; filter: brightness(1.5); }
+        .charging-ring {
+            width: 290px; height: 290px; border: 5px solid transparent;
+            border-top: 5px solid #f00; border-radius: 50%;
+            position: absolute; top: 0; left: 0; animation: spin 0.5s linear infinite;
         }
-        #mainBtn { 
-            padding: 40px 100px; font-size: 2.5rem; background: #ff0000; color: #000;
-            border: none; border-radius: 50px; cursor: pointer; font-weight: bold;
-            box-shadow: 0 0 40px #f00;
-        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .flash-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; opacity: 0; pointer-events: none; z-index: 100; }
+        #status { font-size: 1.5rem; color: #f00; margin-top: 30px; letter-spacing: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="display"><span id="freqVal">30.0</span>Hz</div>
-    
-    <div class="controls">
-        <input type="range" id="freqSlider" min="10" max="100" step="0.1" value="30.0">
-        <div class="adjust-btns">
-            <button onclick="adjust(-1)">-1Hz</button>
-            <button onclick="adjust(-0.1)">-0.1Hz</button>
-            <button onclick="adjust(0.1)">+0.1Hz</button>
-            <button onclick="adjust(1)">+1Hz</button>
-        </div>
+    <div class="flash-overlay" id="flash"></div>
+    <div class="trigger-area">
+        <div class="charging-ring"></div>
+        <button class="fire-btn" id="fireBtn">LAUNCH</button>
     </div>
-
-    <button id="mainBtn">LOCK ON / START</button>
+    <div id="status">ENERGY STABILIZED</div>
 
     <script>
-        let audioCtx, osc, gainNode, isRunning = false;
-        const freqVal = document.getElementById('freqVal');
-        const freqSlider = document.getElementById('freqSlider');
-        const mainBtn = document.getElementById('mainBtn');
+        let audioCtx;
+        const fireBtn = document.getElementById('fireBtn');
+        const flash = document.getElementById('flash');
+        const status = document.getElementById('status');
 
-        function updateFreq(val) {
-            const f = parseFloat(val).toFixed(1);
-            freqVal.textContent = f;
-            freqSlider.value = f;
-            if (osc) osc.frequency.setTargetAtTime(f, audioCtx.currentTime, 0.01);
-        }
-
-        function adjust(amt) {
-            updateFreq(parseFloat(freqSlider.value) + amt);
-        }
-
-        freqSlider.oninput = (e) => updateFreq(e.target.value);
-
-        mainBtn.onclick = () => {
+        fireBtn.onmousedown = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-            if (!isRunning) {
-                osc = audioCtx.createOscillator();
-                gainNode = audioCtx.createGain();
-                
-                // 最も押し出しの強い「矩形波」に固定
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(freqSlider.value, audioCtx.currentTime);
-                
-                // 外部スピーカーを振り切らせるための最大ゲイン
-                gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
-
-                osc.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                osc.start();
-                
-                mainBtn.textContent = "STOP";
-                mainBtn.style.background = "#444";
-                isRunning = true;
-            } else {
-                osc.stop();
-                isRunning = false;
-                mainBtn.textContent = "LOCK ON / START";
-                mainBtn.style.background = "#ff0000";
-            }
+            status.textContent = "LOCK ON";
         };
+
+        fireBtn.onclick = () => {
+            // 発射！
+            executeLaunch();
+            
+            // 視覚的な爆発
+            flash.style.opacity = "1";
+            status.textContent = "FIRE!!";
+            setTimeout(() => {
+                flash.style.opacity = "0";
+                status.textContent = "RECHARGING...";
+                setTimeout(() => { status.textContent = "READY"; }, 500);
+            }, 50);
+        };
+
+        function executeLaunch() {
+            const bufferSize = audioCtx.sampleRate * 0.05; // 0.05秒に凝縮
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+
+            // スピーカーの物理限界を攻める「超インパルス」
+            for (let i = 0; i < bufferSize; i++) {
+                if (i < 50) {
+                    // 最初にガツンとマイナスに引き込み（タメ）
+                    data[i] = -1.0;
+                } else if (i < 300) {
+                    // 瞬時にプラス最大へ蹴り出し（爆発）
+                    data[i] = 1.0;
+                } else {
+                    // 急ブレーキ
+                    data[i] = 0;
+                }
+            }
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            const gain = audioCtx.createGain();
+            
+            // ゲインを限界（20倍）まで引き上げ
+            gain.gain.setValueAtTime(20.0, audioCtx.currentTime);
+            
+            source.connect(gain);
+            gain.connect(audioCtx.destination);
+            source.start();
+        }
     </script>
 </body>
 </html>
