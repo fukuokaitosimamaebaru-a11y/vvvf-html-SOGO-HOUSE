@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>ATS統合シミュレーター</title>
+    <title>統合シミュレーター - 完全復活版</title>
     <style>
         body { 
             background: #111; color: #000; font-family: 'MS Gothic', sans-serif;
@@ -16,114 +16,67 @@
             white-space: normal; margin: 0 100px;
         }
 
-        h1 { font-size: 1.8rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 20px; text-align: center;}
+        h1 { font-size: 1.8rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
         .danger-stripes { height: 25px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 10px; }
 
         .btn-group { display: flex; flex-direction: column; gap: 15px; }
+        button { padding: 25px; font-size: 1.5rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; }
         
-        /* 統合起動ボタン */
-        #masterStart { background: #00ff00; padding: 30px; font-size: 2rem; border: 5px solid #000; font-weight: bold; cursor: pointer; }
-        #masterStart.active { animation: blink-green 0.5s infinite; background: #fff; }
-        
-        /* 停止ボタン */
-        #emergencyStop { background: #ff0000; color: #fff; padding: 20px; font-size: 1.5rem; border: 5px solid #000; cursor: pointer; margin-top: 10px; }
+        /* エリア別カラー */
+        .btn-ats { background: #ff8800; color: #000; }
+        .btn-vertical { background: #00ff00; color: #000; }
+        .btn-alarm { background: #d00; color: #fff; text-shadow: 0 0 10px #fff; }
+        .btn-stop { background: #fff; color: #000; }
 
-        @keyframes blink-green { 0% { background: #00ff00; } 50% { background: #adff2f; } 100% { background: #00ff00; } }
+        .active { animation: blink 0.2s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
-        .status-window { background: #000; color: #0f0; padding: 15px; font-family: monospace; margin: 15px 0; border: 2px solid #555; }
-        .hex-id { font-size: 0.7rem; color: #888; text-align: right; }
+        .status-window { background: #000; color: #0f0; padding: 15px; font-family: monospace; margin: 15px 0; border: 2px solid #555; min-height: 3rem; }
     </style>
 </head>
 <body>
 
     <div class="stage-container">
-        
         <div class="panel">
             <div class="danger-stripes"></div>
-            <h1>ATS 統合制御システム</h1>
-            <div class="status-window" id="display">SYSTEM READY...</div>
-            
+            <h1>ATS-S 警報</h1>
+            <div class="status-window" id="atsStatus">READY</div>
             <div class="btn-group">
-                <button id="masterStart">シミュレーター起動</button>
-                <button id="emergencyStop">一括停止（復帰）</button>
+                <button id="atsBtn" class="btn-ats">ATS起動</button>
+                <button id="stopAts" class="btn-stop">警報確認</button>
             </div>
-            
-            <div class="hex-id">HEX-CORE / ATS-P CONNECTED</div>
         </div>
 
         <div class="panel">
             <div class="danger-stripes"></div>
-            <h1 style="color: #d00;">非常警報【極】</h1>
-            <p>※ATSとは別系統の独立回路</p>
-            <button id="alarmBtn" style="width:100%; padding:40px; background:#d00; color:#fff; font-size:2rem; border:5px solid #000; cursor:pointer;">警報発令</button>
-            <div class="hex-id" style="margin-top:20px;">EXTERNAL-NODE</div>
+            <h1>垂直射出・最強</h1>
+            <div class="status-window" id="vStatus">STANDBY</div>
+            <div class="btn-group">
+                <button id="vBtn" class="btn-vertical">連射開始</button>
+                <button id="stopV" class="btn-stop">緊急終了</button>
+            </div>
         </div>
 
+        <div class="panel">
+            <div class="danger-stripes"></div>
+            <h1>非常警報【極】</h1>
+            <div class="status-window" id="aStatus">STABLE</div>
+            <div class="btn-group">
+                <button id="alarmBtn" class="btn-alarm">警報発令</button>
+                <button id="stopAlarm" class="btn-stop">停止</button>
+            </div>
+        </div>
     </div>
 
     <script>
         let audioCtx;
-        let atsInterval;
-        let isRunning = false;
+        let intervals = { ats: null, v: null, alarm: null };
 
         const setupAudio = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         };
 
-        const masterStart = document.getElementById('masterStart');
-        const display = document.getElementById('display');
-
-        // 統合起動ボタン
-        masterStart.onclick = () => {
-            setupAudio();
-            if (isRunning) return;
-            isRunning = true;
-            masterStart.classList.add('active');
-            display.textContent = "ATS RUNNING: キンコン... \nVERTICAL: STANDBY";
-
-            let step = 0;
-            atsInterval = setInterval(() => {
-                const sampleRate = audioCtx.sampleRate;
-                // ATS音 (キン=780Hz, コン=650Hz)
-                const freq = (step % 2 === 0) ? 780 : 650;
-                const buffer = audioCtx.createBuffer(1, sampleRate * 0.2, sampleRate);
-                const data = buffer.getChannelData(0);
-
-                for (let i = 0; i < buffer.length; i++) {
-                    const env = Math.exp(-i / (sampleRate * 0.08));
-                    // 物理打撃を強めるためのサイン波 + 矩形波のミックス
-                    const wave = Math.sin(2 * Math.PI * freq * (i / sampleRate));
-                    data[i] = wave * env;
-                }
-                
-                playBuffer(buffer, 450); // ATSのリズムで垂直にノック
-                step++;
-            }, 600);
-        };
-
-        // 一括停止
-        document.getElementById('emergencyStop').onclick = () => {
-            isRunning = false;
-            clearInterval(atsInterval);
-            masterStart.classList.remove('active');
-            display.textContent = "SYSTEM READY...";
-        };
-
-        // 火災報知器 (独立)
-        document.getElementById('alarmBtn').onclick = () => {
-            setupAudio();
-            // 既存の音を止めずに重ねる
-            setInterval(() => {
-                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
-                const data = buffer.getChannelData(0);
-                for (let i = 0; i < buffer.length; i++) {
-                    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / 1000);
-                }
-                playBuffer(buffer, 300);
-            }, 60);
-        };
-
-        function playBuffer(buffer, gainVal) {
+        const play = (buffer, gainVal) => {
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
             const gain = audioCtx.createGain();
@@ -131,7 +84,77 @@
             source.connect(gain);
             gain.connect(audioCtx.destination);
             source.start();
-        }
+        };
+
+        // --- 垂直射出ロジック ---
+        document.getElementById('vBtn').onclick = () => {
+            setupAudio();
+            if (intervals.v) return;
+            document.getElementById('vStatus').textContent = "FIRING: 25Hz";
+            document.getElementById('vBtn').classList.add('active');
+            intervals.v = setInterval(() => {
+                const period = Math.floor(audioCtx.sampleRate / 25);
+                const buffer = audioCtx.createBuffer(1, period, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                const pull = Math.floor(period * 0.8);
+                for(let i=0; i<period; i++) data[i] = (i < pull) ? -1.0 : 1.0;
+                for(let j=0; j<8; j++) play(buffer, 500);
+            }, 40);
+        };
+
+        // --- 火災報知器ロジック ---
+        document.getElementById('alarmBtn').onclick = () => {
+            setupAudio();
+            if (intervals.alarm) return;
+            document.getElementById('aStatus').textContent = "WARNING: FIRE";
+            document.getElementById('alarmBtn').classList.add('active');
+            intervals.alarm = setInterval(() => {
+                const duration = audioCtx.sampleRate * 0.05;
+                const buffer = audioCtx.createBuffer(1, duration, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for(let i=0; i<duration; i++) {
+                    const impact = Math.exp(-i / 500) * (i % 2 === 0 ? 1 : -1);
+                    const ringing = Math.sin(2 * Math.PI * 3000 * (i / audioCtx.sampleRate)) * Math.exp(-i / 1500);
+                    data[i] = (impact * 0.7) + (ringing * 0.3);
+                }
+                play(buffer, 400);
+            }, 60);
+        };
+
+        // --- ATS-Sロジック ---
+        document.getElementById('atsBtn').onclick = () => {
+            setupAudio();
+            if (intervals.ats) return;
+            document.getElementById('atsBtn').classList.add('active');
+            let t = 0;
+            intervals.ats = setInterval(() => {
+                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                if (t < 10) {
+                    document.getElementById('atsStatus').textContent = "ジロジロジロ...";
+                    for(let i=0; i<buffer.length; i++) data[i] = (Math.sin(2*Math.PI*1100*(i/audioCtx.sampleRate)) + Math.sin(2*Math.PI*1120*(i/audioCtx.sampleRate))) > 0 ? 1 : -1;
+                } else {
+                    document.getElementById('atsStatus').textContent = "ピッロ ピッロ...";
+                    const f = (t % 2 === 0) ? 1300 : 1000;
+                    for(let i=0; i<buffer.length; i++) data[i] = Math.sin(2*Math.PI*f*(i/audioCtx.sampleRate)) > 0 ? 1 : -1;
+                }
+                play(buffer, 300);
+                t++;
+            }, 180);
+        };
+
+        // 停止処理
+        const stop = (id, intervalKey, statusId, statusText) => {
+            clearInterval(intervals[intervalKey]);
+            intervals[intervalKey] = null;
+            document.getElementById(id).classList.remove('active');
+            document.getElementById(statusId).textContent = statusText;
+        };
+
+        document.getElementById('stopV').onclick = () => stop('vBtn', 'v', 'vStatus', 'STANDBY');
+        document.getElementById('stopAlarm').onclick = () => stop('alarmBtn', 'alarm', 'aStatus', 'STABLE');
+        document.getElementById('stopAts').onclick = () => stop('atsBtn', 'ats', 'atsStatus', 'READY');
+
     </script>
 </body>
 </html>
