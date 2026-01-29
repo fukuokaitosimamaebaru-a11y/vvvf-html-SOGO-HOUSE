@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ATS Simulator v1.0</title>
+    <style>
+        body { background: #222; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; }
+        #cab-view { width: 600px; height: 400px; background: #000; border: 5px solid #444; position: relative; overflow: hidden; margin-top: 20px; }
+        
+        /* ATSパネル */
+        #ats-panel { width: 200px; height: 100px; background: #333; border: 2px solid #555; margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; padding: 10px; gap: 10px; }
+        .lamp { border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.1); }
+        
+        /* 表示灯の状態 */
+        .power { background: #444; color: #777; }
+        .power.on { background: #fff; color: #000; box-shadow: 0 0 10px #fff; }
+        .red { background: #400; }
+        .red.on { background: #f00; color: #fff; box-shadow: 0 0 15px #f00; }
+        
+        #controls { margin-top: 20px; }
+        button { padding: 10px 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>ATS 動作再現シミュレーター</h2>
+
+    <div id="cab-view">
+        <div style="position:absolute; bottom:20px; width:100%; text-align:center; color:#5f5;">速度: <span id="speed-display">0</span> km/h</div>
+    </div>
+
+    <div id="ats-panel">
+        <div id="lamp-p" class="lamp power on">電源</div>
+        <div id="lamp-s" class="lamp red">ATS-S</div>
+        <div id="lamp-p-red" class="lamp red">ATS-P</div>
+        <div id="lamp-alarm" class="lamp red">警報</div>
+    </div>
+
+    <div id="controls">
+        <button onclick="triggerAts()">地上子通過 (警報開始)</button>
+        <button onclick="confirmAts()">ATS確認 (Space)</button>
+    </div>
+
+    <script>
+        let speed = 80;
+        let isAlarming = false;
+        let audioCtx = null;
+
+        // 音源作成 (ベル音・チャイム音の簡易合成)
+        function playSound(freq, duration, type = 'square') {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        // ジリリリ音 (ATS-S ベル)
+        let bellInterval;
+        function startBell() {
+            if (isAlarming) return;
+            isAlarming = true;
+            document.getElementById('lamp-s').classList.add('on');
+            document.getElementById('lamp-alarm').classList.add('on');
+            
+            bellInterval = setInterval(() => {
+                playSound(800, 0.05, 'sawtooth');
+            }, 100);
+        }
+
+        function stopBell() {
+            clearInterval(bellInterval);
+            document.getElementById('lamp-alarm').classList.remove('on');
+            // チャイム音へ移行（キンコンキンコン）
+            isAlarming = false;
+            playChime();
+        }
+
+        function playChime() {
+            const chime = setInterval(() => {
+                if(isAlarming) clearInterval(chime);
+                playSound(660, 0.4, 'sine');
+                setTimeout(() => playSound(554, 0.4, 'sine'), 400);
+            }, 800);
+            // 便宜上5秒で止まるように設定
+            setTimeout(() => clearInterval(chime), 5000);
+        }
+
+        function triggerAts() {
+            startBell();
+        }
+
+        function confirmAts() {
+            if (isAlarming) {
+                stopBell();
+                console.log("ATS確認完了");
+            }
+        }
+
+        // キーボード操作
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') confirmAts();
+        });
+
+        // 速度表示更新
+        setInterval(() => {
+            document.getElementById('speed-display').innerText = speed;
+        }, 100);
+
+    </script>
+</body>
+</html>
