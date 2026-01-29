@@ -2,25 +2,47 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Speaker Vibrator</title>
+    <title>MAX LEVEL VIBRATOR</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; background: #111; color: #fff; }
-        button { padding: 20px 40px; font-size: 20px; cursor: pointer; background: #ff4444; border: none; color: white; border-radius: 10px; }
-        input { width: 300px; }
-        .controls { margin-top: 30px; }
+        body { 
+            font-family: 'Arial Black', sans-serif; 
+            text-align: center; 
+            background: #000; 
+            color: #ff0000; 
+            overflow: hidden;
+            display: flex; flex-direction: column; justify-content: center; height: 100vh;
+        }
+        /* 画面を激しく揺らすアニメーション */
+        @keyframes shake {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(5px, -5px); }
+            50% { transform: translate(-5px, 5px); }
+            75% { transform: translate(5px, 5px); }
+            100% { transform: translate(0, 0); }
+        }
+        .vibrating { animation: shake 0.05s infinite; background: #200; }
+
+        h1 { font-size: 3rem; text-shadow: 0 0 20px #f00; }
+        button { 
+            padding: 30px 60px; font-size: 30px; font-weight: bold;
+            cursor: pointer; background: #ff0000; border: none; color: #000; 
+            border-radius: 50px; box-shadow: 0 0 30px #f00; transition: 0.2s;
+        }
+        button:active { transform: scale(0.9); }
+        .warning { color: #ffcc00; margin-top: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>Speaker Vibrator</h1>
-    <p>低周波でスピーカーを物理的に震わせます。</p>
+    <h1>MAX LEVEL</h1>
+    <p>矩形波(Square Wave)による最大振幅</p>
     
-    <button id="toggleBtn">再生 / 停止</button>
+    <div>
+        <button id="toggleBtn">OVERDRIVE START</button>
+    </div>
 
-    <div class="controls">
-        <p>周波数: <span id="freqVal">30</span>Hz</p>
-        <input type="range" id="freqSlider" min="20" max="100" value="30">
-        <p><small>※20Hz〜60Hzが最も震えます</small></p>
+    <div class="warning">
+        ⚠️ WARNING: スピーカーの破損に注意してください
     </div>
 
     <script>
@@ -29,47 +51,37 @@
         let gainNode;
         let isPlaying = false;
 
-        const toggleBtn = document.getElementById('toggleBtn');
-        const freqSlider = document.getElementById('freqSlider');
-        const freqVal = document.getElementById('freqVal');
+        const btn = document.getElementById('toggleBtn');
 
-        toggleBtn.addEventListener('click', () => {
+        btn.addEventListener('click', () => {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
 
             if (!isPlaying) {
-                // オシレーター作成
                 oscillator = audioCtx.createOscillator();
                 gainNode = audioCtx.createGain();
 
-                // 波形の設定（sine = 滑らか, square = 激しい）
-                oscillator.type = 'sine'; 
-                oscillator.frequency.setValueAtTime(freqSlider.value, audioCtx.currentTime);
+                // 矩形波 (Square Wave) は最も振動が激しい波形です
+                oscillator.type = 'square'; 
+                // 35Hz付近が物理的な振動と音圧のバランスが最強です
+                oscillator.frequency.setValueAtTime(35, audioCtx.currentTime);
 
-                // 音量の設定
-                gainNode.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                // 利得(Gain)を1.0（最大）に設定
+                gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
 
                 oscillator.connect(gainNode);
                 gainNode.connect(audioCtx.destination);
 
                 oscillator.start();
-                toggleBtn.textContent = "停止";
-                toggleBtn.style.background = "#444";
+                document.body.classList.add('vibrating');
+                btn.textContent = "STOP";
                 isPlaying = true;
             } else {
                 oscillator.stop();
+                document.body.classList.remove('vibrating');
+                btn.textContent = "OVERDRIVE START";
                 isPlaying = false;
-                toggleBtn.textContent = "再生 / 停止";
-                toggleBtn.style.background = "#ff4444";
-            }
-        });
-
-        freqSlider.addEventListener('input', () => {
-            const val = freqSlider.value;
-            freqVal.textContent = val;
-            if (oscillator) {
-                oscillator.frequency.setValueAtTime(val, audioCtx.currentTime);
             }
         });
     </script>
