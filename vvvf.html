@@ -2,47 +2,65 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>福岡市地下鉄4000系 VVVF Simulator</title>
+    <title>Fukuoka 4000 Mascon Sim</title>
     <style>
-        body { background: #003366; color: white; font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
-        .train-ui { border: 5px solid #fff; display: inline-block; padding: 40px; border-radius: 30px; background: linear-gradient(145deg, #004488, #002244); box-shadow: 0 0 50px rgba(0,0,0,0.5); }
-        .logo { font-size: 20px; font-weight: bold; margin-bottom: 10px; border-bottom: 2px solid #fff; display: inline-block; }
-        .speed-panel { font-size: 80px; font-family: 'Digital-7', monospace; color: #00ffcc; background: #000; padding: 10px 40px; border-radius: 10px; margin: 20px 0; border: 2px solid #00ffcc; text-shadow: 0 0 15px #00ffcc; }
-        .ctrl-btn { width: 150px; height: 150px; border-radius: 50%; border: none; font-size: 24px; font-weight: bold; cursor: pointer; margin: 10px; box-shadow: 0 10px #333; transition: 0.1s; }
-        #accel { background: #ffcc00; color: #000; }
-        #brake { background: #cccccc; color: #333; }
-        .ctrl-btn:active { transform: translateY(8px); box-shadow: 0 2px #333; }
-        .boost-label { color: #ff4444; font-weight: bold; font-size: 12px; }
-        input[type="range"] { width: 100%; height: 15px; background: #444; }
+        body { background: #1a1a1a; color: white; font-family: sans-serif; text-align: center; user-select: none; }
+        .mascon-container { border: 4px solid #333; display: inline-block; padding: 20px; border-radius: 20px; background: #2a2a2a; margin-top: 20px; }
+        .notch-display { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #ffcc00; }
+        .speed-meter { font-size: 64px; background: #000; color: #00ffcc; padding: 10px 30px; border: 2px solid #00ffcc; border-radius: 10px; font-family: monospace; margin-bottom: 20px; }
+        
+        /* マスコンスライダーの外観 */
+        input[type="range"].mascon-slider {
+            writing-mode: bt-lr; /* 縦向き */
+            -webkit-appearance: slider-vertical;
+            width: 80px; height: 300px; padding: 0 10px;
+        }
+
+        .labels { display: flex; flex-direction: column; justify-content: space-between; height: 300px; font-weight: bold; font-family: monospace; }
+        .main-flex { display: flex; align-items: center; justify-content: center; gap: 20px; }
+        .btn-start { background: #cc0000; color: white; border: none; padding: 15px 30px; border-radius: 5px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div class="train-ui">
-    <div class="logo">FUKUOKA CITY SUBWAY 4000</div>
-    <div id="status">PUSH START TO SYNC</div>
-    <button id="startBtn" style="padding:10px 20px; font-size:20px; cursor:pointer;">SYSTEM START</button>
+<div class="mascon-container">
+    <div id="status">PRESS START</div>
+    <button id="startBtn" class="btn-start">起動 (START)</button>
     
-    <div class="speed-panel"><span id="speed">0</span> <small style="font-size:20px;">km/h</small></div>
+    <div class="speed-meter"><span id="speed">0</span> <small>km/h</small></div>
+    <div class="notch-display" id="notchLabel">N (ニュートラル)</div>
 
-    <div>
-        <button id="brake" class="ctrl-btn">B1-B7<br>減速</button>
-        <button id="accel" class="ctrl-btn">P1-P4<br>加速</button>
+    <div class="main-flex">
+        <div class="labels">
+            <div style="color:#ff4444">P5</div>
+            <div>P1</div>
+            <div style="color:#ffffff">N</div>
+            <div>B1</div>
+            <div style="color:#4444ff">B7</div>
+            <div style="color:#ff0000">Eb</div>
+        </div>
+        <input type="range" id="mascon" class="mascon-slider" min="-8" max="5" value="0" step="1">
     </div>
 
     <div style="margin-top:20px;">
-        <p class="boost-label">⚠ OUTPUT BOOST (爆音設定)</p>
-        <input type="range" id="volume" min="0" max="2.0" step="0.1" value="0.8">
+        <label>VOLUME</label><br>
+        <input type="range" id="vol" min="0" max="1.5" step="0.1" value="0.7">
     </div>
 </div>
 
 <script>
     let audioCtx = null;
-    let motorOsc = null;   // 低音（PMSM特有の唸り）
-    let sicOsc = null;     // 高音（SiCインバータ音）
+    let motorOsc = null;
+    let sicOsc = null;
     let gainNode = null;
+    
     let speed = 0;
-    let mode = 0; // 0:停止, 1:加速, 2:減速
+    let notch = 0;
+
+    const startBtn = document.getElementById('startBtn');
+    const mascon = document.getElementById('mascon');
+    const notchLabel = document.getElementById('notchLabel');
+    const speedDisp = document.getElementById('speed');
 
     function init() {
         if (audioCtx) return;
@@ -50,11 +68,8 @@
         gainNode = audioCtx.createGain();
         gainNode.connect(audioCtx.destination);
 
-        // PMSMの唸り音（三角波で滑らかに）
         motorOsc = audioCtx.createOscillator();
         motorOsc.type = 'triangle';
-        
-        // SiCのキーンという音（正弦波で純音に近く）
         sicOsc = audioCtx.createOscillator();
         sicOsc.type = 'sine';
 
@@ -64,62 +79,61 @@
         motorOsc.start();
         sicOsc.start();
         gainNode.gain.value = 0;
-
-        document.getElementById('startBtn').style.display = 'none';
-        document.getElementById('status').innerText = "ALL SYSTEMS GO";
+        
+        startBtn.style.display = 'none';
+        document.getElementById('status').innerText = "SYSTEM ONLINE";
     }
 
-    document.getElementById('startBtn').addEventListener('click', init);
+    startBtn.addEventListener('click', init);
 
-    const accelBtn = document.getElementById('accel');
-    const brakeBtn = document.getElementById('brake');
-
-    accelBtn.onmousedown = () => { mode = 1; };
-    accelBtn.onmouseup = () => { mode = 0; };
-    brakeBtn.onmousedown = () => { mode = 2; };
-    brakeBtn.onmouseup = () => { mode = 0; };
-
-    // タッチデバイス対応
-    accelBtn.ontouchstart = () => { mode = 1; };
-    accelBtn.ontouchend = () => { mode = 0; };
-    brakeBtn.ontouchstart = () => { mode = 2; };
-    brakeBtn.ontouchend = () => { mode = 0; };
+    // ノッチのラベル表示更新
+    mascon.addEventListener('input', () => {
+        notch = parseInt(mascon.value);
+        if (notch > 0) notchLabel.innerText = "P" + notch;
+        else if (notch === 0) notchLabel.innerText = "N (ニュートラル)";
+        else if (notch > -8) notchLabel.innerText = "B" + Math.abs(notch);
+        else notchLabel.innerText = "Eb (非常ブレーキ)";
+    });
 
     setInterval(() => {
         if (!audioCtx) return;
 
-        if (mode === 1) speed = Math.min(speed + 0.4, 110);
-        if (mode === 2) speed = Math.max(speed - 0.6, 0);
-        if (mode === 0 && speed > 0) speed = Math.max(speed - 0.05, 0); // 惰行
+        // --- 物理演算部 ---
+        if (notch > 0) {
+            // 加速（P1〜P5）
+            speed += (notch * 0.15); 
+        } else if (notch < 0) {
+            // ブレーキ（B1〜B7, Eb）
+            let brakePower = Math.abs(notch) * 0.25;
+            if (notch === -8) brakePower = 2.0; // Ebの強力な減速
+            speed = Math.max(speed - brakePower, 0);
+        } else {
+            // 自然減速（空気抵抗など）
+            speed = Math.max(speed - 0.02, 0);
+        }
 
-        document.getElementById('speed').innerText = Math.floor(speed);
+        if (speed > 110) speed = 110; // 最高速度制限
+        speedDisp.innerText = Math.floor(speed);
 
+        // --- 音響処理部 ---
         const now = audioCtx.currentTime;
-        const vol = document.getElementById('volume').value;
+        const volBase = document.getElementById('vol').value;
 
         if (speed > 0.1) {
-            // 音量設定
-            gainNode.gain.setTargetAtTime(vol * 0.3, now, 0.1);
+            // 加速時(P)は少し音を大きく、それ以外は控えめに
+            let currentVol = (notch > 0) ? volBase * 0.4 : volBase * 0.15;
+            gainNode.gain.setTargetAtTime(currentVol, now, 0.1);
 
-            // --- 福岡地下鉄4000系 SiC-PMSM 特有のロジック ---
+            // モーター回転音
+            motorOsc.frequency.setTargetAtTime(speed * 3.8 + 15, now, 0.1);
+
+            // SiCインバータ音の変遷（4000系風）
+            let sicFreq = 1200;
+            if (speed < 20) sicFreq = 1100 + (speed * 30);
+            else if (speed < 50) sicFreq = 1700 + (speed * 10);
+            else sicFreq = 2200 + (speed * 5);
             
-            // 1. 低音（モーター回転数）: 速度に比例
-            motorOsc.frequency.setTargetAtTime(speed * 3.5 + 20, now, 0.1);
-
-            // 2. SiCキャリア音（あの高い音）
-            let sicFreq = 1000; // 初期値
-            if (speed < 15) {
-                // 起動〜低速：一定の高音から徐々に変化
-                sicFreq = 1100 + (speed * 20);
-            } else if (speed < 40) {
-                // 中速域：さらに高くなる
-                sicFreq = 1400 + (speed * 15);
-            } else {
-                // 高速域：非常に高い音で安定
-                sicFreq = 2000 + (speed * 5);
-            }
             sicOsc.frequency.setTargetAtTime(sicFreq, now, 0.1);
-
         } else {
             gainNode.gain.setTargetAtTime(0, now, 0.1);
         }
