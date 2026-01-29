@@ -2,92 +2,132 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>垂直衝撃 - 最強モード</title>
+    <title>垂直衝撃 & リアル火災報知器</title>
     <style>
-        body { background: #111; color: #000; text-align: center; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .panel { background: #ffcc00; padding: 40px; border: 10px solid #000; box-shadow: 20px 20px 0 #444; width: 350px; }
-        h1 { font-size: 2rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 30px; }
-        .btn-group { display: flex; flex-direction: column; gap: 20px; }
-        button { padding: 25px; font-size: 1.8rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; }
-        #startBtn { background: #00ff00; color: #000; }
-        #startBtn:active { background: #fff; transform: scale(0.95); }
-        #startBtn:disabled { background: #888; cursor: not-allowed; }
-        #stopBtn { background: #ff0000; color: #fff; }
-        #stopBtn:active { background: #fff; color: #000; transform: scale(0.95); }
-        #status { margin-top: 25px; font-weight: bold; font-size: 1.2rem; background: #000; color: #ffcc00; padding: 10px; }
-        .danger-stripes { height: 20px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 20px; }
+        body { 
+            background: #111; color: #000; font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0; overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+        }
+        .stage-container { display: inline-flex; height: 100vh; align-items: center; padding: 0 50vw; }
+        
+        .panel { 
+            display: inline-block; background: #ffcc00; padding: 40px; border: 10px solid #000; 
+            box-shadow: 20px 20px 0 #444; width: 350px; vertical-align: middle; 
+            white-space: normal; margin: 0 100px;
+        }
+
+        h1 { font-size: 1.8rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+        .danger-stripes { height: 20px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 10px; }
+
+        .btn-group { display: flex; flex-direction: column; gap: 15px; }
+        button { padding: 25px; font-size: 1.5rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; }
+        
+        #startBtn { background: #00ff00; }
+        #alarmBtn { background: #d00; color: #fff; text-shadow: 0 0 10px #fff; }
+        #alarmBtn.active { animation: blink-red 0.1s infinite; }
+        
+        @keyframes blink-red { 0% { background: #d00; } 50% { background: #ff5555; } 100% { background: #d00; } }
+
+        #stopBtn, #stopAlarmBtn { background: #fff; }
+
+        .hex-bg { 
+            font-size: 0.8rem; background: #000; color: #ffcc00; padding: 10px; 
+            margin-top: 15px; border: 2px dashed #ffcc00;
+        }
     </style>
 </head>
 <body>
 
-    <div class="panel">
-        <div class="danger-stripes"></div>
-        <h1>垂直衝撃・最強</h1>
-        <div id="status">システム待機中</div>
-        <div class="btn-group">
-            <button id="startBtn">連射開始</button>
-            <button id="stopBtn">緊急終了</button>
+    <div class="stage-container">
+        <div class="panel">
+            <div class="danger-stripes"></div>
+            <h1>垂直射出・最強</h1>
+            <div class="hex-bg">AREA: HEX-CORE [CENTER]</div>
+            <div class="btn-group">
+                <button id="startBtn">連射開始</button>
+                <button id="stopBtn">停止</button>
+            </div>
         </div>
-        <p><small>上下↕️ストローク最大化設定</small></p>
+
+        <div class="panel">
+            <div class="danger-stripes"></div>
+            <h1 style="color: #d00;">非常警報【極】</h1>
+            <div class="hex-bg">AREA: HEX-EXTERNAL [RIGHT]</div>
+            <p>※実物のベルを凌駕する超リアル衝撃波</p>
+            <div class="btn-group">
+                <button id="alarmBtn">警報発令</button>
+                <button id="stopAlarmBtn">警報停止</button>
+            </div>
+        </div>
     </div>
 
     <script>
         let audioCtx;
-        let isFiring = false;
         let fireInterval;
+        let isRunning = false;
 
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const status = document.getElementById('status');
-
-        startBtn.onclick = () => {
+        const setupAudio = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (isFiring) return;
-
-            isFiring = true;
-            startBtn.disabled = true;
-            status.textContent = "警告：垂直射出中！！";
-            status.style.color = "#ff0000";
-
-            // 垂直ストロークを優先した衝撃連射
-            fireInterval = setInterval(executeVerticalImpact, 40); // 25Hz相当で最も深く揺らす
         };
 
-        stopBtn.onclick = () => {
-            if (!isFiring) return;
-            isFiring = false;
-            startBtn.disabled = false;
+        // --- 垂直衝撃 (30Hz上下優先) ---
+        document.getElementById('startBtn').onclick = () => {
+            setupAudio();
+            if (isRunning) return;
+            isRunning = true;
+            fireInterval = setInterval(() => {
+                const period = Math.floor(audioCtx.sampleRate / 25);
+                const buffer = audioCtx.createBuffer(1, period, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                const pullEnd = Math.floor(period * 0.8);
+                for (let i = 0; i < period; i++) data[i] = (i < pullEnd) ? -1.0 : 1.0;
+                playBuffer(buffer, 600);
+            }, 40);
+        };
+
+        // --- 特級・火災報知器 (リアル・ベル・ストライク) ---
+        document.getElementById('alarmBtn').onclick = () => {
+            setupAudio();
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('alarmBtn').classList.add('active');
+
+            fireInterval = setInterval(() => {
+                // 打撃一回分のバッファ
+                const sampleRate = audioCtx.sampleRate;
+                const duration = sampleRate * 0.05; // 50msの衝撃
+                const buffer = audioCtx.createBuffer(1, duration, sampleRate);
+                const data = buffer.getChannelData(0);
+
+                for (let i = 0; i < duration; i++) {
+                    // 1. 低域の「ガッ」という物理打撃
+                    const impact = Math.exp(-i / 500) * (i % 2 === 0 ? 1 : -1);
+                    // 2. 高域の「キーン」というベルの金属共鳴 (3000Hz)
+                    const ringing = Math.sin(2 * Math.PI * 3000 * (i / sampleRate)) * Math.exp(-i / 1500);
+                    
+                    data[i] = (impact * 0.7) + (ringing * 0.3);
+                }
+                playBuffer(buffer, 400);
+            }, 60); // 1秒間に約16回のリアルな打撃間隔
+        };
+
+        const stopAll = () => {
+            isRunning = false;
             clearInterval(fireInterval);
-            status.textContent = "システム待機中";
-            status.style.color = "#ffcc00";
+            document.getElementById('alarmBtn').classList.remove('active');
         };
 
-        function executeVerticalImpact() {
-            const sampleRate = audioCtx.sampleRate;
-            const period = Math.floor(sampleRate / 25); // 25Hzで最大ストロークを狙う
-            const buffer = audioCtx.createBuffer(1, period, sampleRate);
-            const data = buffer.getChannelData(0);
+        document.getElementById('stopBtn').onclick = stopAll;
+        document.getElementById('stopAlarmBtn').onclick = stopAll;
 
-            // 【垂直特化波形】
-            // 前半80%でじっくり「引き込み」、後半20%で爆速「突き上げ」
-            const pullEnd = Math.floor(period * 0.8);
-            for (let i = 0; i < period; i++) {
-                data[i] = (i < pullEnd) ? -1.0 : 1.0; 
-            }
-
-            // 並列10系統による暴力的なパワー供給
-            for(let j = 0; j < 10; j++) {
-                const source = audioCtx.createBufferSource();
-                source.buffer = buffer;
-                const gain = audioCtx.createGain();
-                
-                // 限界値をはるかに超えるゲイン設定
-                gain.gain.setValueAtTime(500.0, audioCtx.currentTime); 
-                
-                source.connect(gain);
-                gain.connect(audioCtx.destination);
-                source.start();
-            }
+        function playBuffer(buffer, gainVal) {
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+            source.connect(gain);
+            gain.connect(audioCtx.destination);
+            source.start();
         }
     </script>
 </body>
