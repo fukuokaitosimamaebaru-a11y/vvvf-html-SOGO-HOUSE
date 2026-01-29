@@ -2,125 +2,150 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>極限再現：ATS-S 物理コンソール</title>
+    <title>ATS-S & ドアチャイム コンソール</title>
     <style>
         body { 
-            background: #111; color: #000; font-family: 'MS Gothic', sans-serif;
-            margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh;
+            background: #1a1a1a; color: #000; font-family: 'MS Gothic', sans-serif;
+            display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;
         }
         .panel { 
-            background: #ffcc00; padding: 40px; border: 10px solid #000; 
-            box-shadow: 20px 20px 0 #444; width: 400px; 
+            background: #ffcc00; padding: 30px; border: 8px solid #000; 
+            box-shadow: 10px 10px 0 #000; width: 350px; text-align: center;
         }
-        h1 { font-size: 1.8rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
-        .danger-stripes { height: 25px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 10px; }
-        .btn-group { display: flex; flex-direction: column; gap: 15px; }
-        button { padding: 25px; font-size: 1.5rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; width: 100%; }
-        
-        .btn-ats { background: #ff8800; }
-        .btn-door { background: #00ff00; }
+        h1 { font-size: 1.5rem; margin-bottom: 20px; border-bottom: 3px solid #000; }
+        .btn-group { display: flex; flex-direction: column; gap: 12px; }
+        button { 
+            padding: 20px; font-size: 1.2rem; font-weight: bold; cursor: pointer; 
+            border: 4px solid #000; background: #eee;
+        }
+        button:active { transform: translateY(2px); filter: brightness(0.9); }
+        .active { background: #ff4444 !important; color: #fff; animation: blink 0.2s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        .status { background: #000; color: #0f0; padding: 8px; font-family: monospace; margin-bottom: 15px; min-height: 1.2rem; }
+        .btn-ats { background: #ffaa00; }
+        .btn-door { background: #44ff44; }
         .btn-horn { background: #00aaff; color: #fff; }
-        .btn-stop { background: #fff; }
-
-        .active { animation: emergency-blink 0.15s infinite; background: #ff0000 !important; color: #fff; }
-        @keyframes emergency-blink { 0% { filter: brightness(1); } 50% { filter: brightness(1.5); } 100% { filter: brightness(1); } }
-        .status { background: #000; color: #f00; padding: 10px; font-family: monospace; margin: 10px 0; border: 2px solid #f00; height: 1.5rem; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="panel">
-        <div class="danger-stripes"></div>
-        <h1>ATS-S 物理再現機</h1>
+        <h1>ATS-S 統合コンソール</h1>
         <div class="status" id="stat">SYSTEM READY</div>
         <div class="btn-group">
-            <button id="atsBtn" class="btn-ats">ATS起動(超リアル)</button>
-            <button id="doorBtn" class="btn-door">戸締めベル</button>
-            <button id="hornBtn" class="btn-horn">警笛</button>
-            <button id="stopBtn" class="btn-stop">復帰 (停止)</button>
+            <button id="atsBtn" class="btn-ats">ATS 警告</button>
+            <button id="doorBtn" class="btn-door">戸締めチャイム</button>
+            <button id="hornBtn" class="btn-horn">警笛 (長押し)</button>
+            <button id="stopBtn" style="background: #fff;">全停止 / 復帰</button>
         </div>
     </div>
 
     <script>
         let audioCtx;
         let intervals = { ats: null, door: null };
+        let hornOscs = [];
+        let hornGain = null;
 
         const setupAudio = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
         };
 
-        const play = (buffer, gainVal) => {
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
+        // --- 汎用音生成 (ATS用) ---
+        const playSimple = (freq, duration, volume = 0.1) => {
+            const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
-            source.connect(gain);
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
             gain.connect(audioCtx.destination);
-            source.start();
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
         };
 
-        // --- 超リアルATS-Sロジック ---
+        // --- 1. ATS 警告 (ジロジロ → ピッロ) ---
         document.getElementById('atsBtn').onclick = () => {
             setupAudio();
             if (intervals.ats) return;
             document.getElementById('atsBtn').classList.add('active');
-            let t = 0;
+            let count = 0;
             intervals.ats = setInterval(() => {
-                const sampleRate = audioCtx.sampleRate;
-                const buffer = audioCtx.createBuffer(1, sampleRate * 0.18, sampleRate);
-                const data = buffer.getChannelData(0);
-
-                if (t < 12) {
-                    document.getElementById('stat').textContent = "ATS: 警告ジロジロ...";
-                    for(let i=0; i<buffer.length; i++) {
-                        const time = i / sampleRate;
-                        // 3種類の不協和音による激しいうねり
-                        const s1 = Math.sin(2 * Math.PI * 1100 * time);
-                        const s2 = Math.sin(2 * Math.PI * 1115 * time);
-                        const s3 = Math.sin(2 * Math.PI * 1132 * time);
-                        const mix = (s1 + s2 + s3) / 3;
-                        // 矩形波的なクリッピングで物理打撃感を強調
-                        data[i] = mix > 0.1 ? 1 : mix < -0.1 ? -1 : 0;
-                    }
+                if (count < 12) {
+                    document.getElementById('stat').textContent = "WARNING: ATS-S";
+                    playSimple(1100 + Math.random() * 20, 0.15, 0.05); // 音量を0.05まで下げ
                 } else {
-                    document.getElementById('stat').textContent = "ATS: ピッロ ピッロ...";
-                    const f = (t % 2 === 0) ? 1320 : 1050; // 少し周波数をずらして実機感
-                    for(let i=0; i<buffer.length; i++) {
-                        data[i] = Math.sin(2 * Math.PI * f * (i / sampleRate)) > 0 ? 1 : -1;
-                    }
+                    document.getElementById('stat').textContent = "ATS: 鐘";
+                    playSimple(count % 2 === 0 ? 1320 : 1050, 0.15, 0.05);
                 }
-                play(buffer, 350);
-                t++;
-            }, 175);
+                count++;
+            }, 180);
         };
 
-        // --- 戸締めベル ---
+        // --- 2. 戸締めチャイム (JRテゥンテゥーン風) ---
         document.getElementById('doorBtn').onclick = () => {
             setupAudio();
             if (intervals.door) return;
             document.getElementById('doorBtn').classList.add('active');
             intervals.door = setInterval(() => {
-                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
-                const data = buffer.getChannelData(0);
-                for(let i=0; i<buffer.length; i++) data[i] = Math.sin(2 * Math.PI * 2500 * (i / audioCtx.sampleRate)) > 0 ? 1 : -1;
-                play(buffer, 200);
-            }, 80);
+                const now = audioCtx.currentTime;
+                // 低音 C6
+                const osc1 = audioCtx.createOscillator();
+                const g1 = audioCtx.createGain();
+                osc1.frequency.setValueAtTime(1046, now);
+                g1.gain.setValueAtTime(0.05, now);
+                g1.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc1.connect(g1); g1.connect(audioCtx.destination);
+                osc1.start(); osc1.stop(now + 0.4);
+
+                // 高音 E6 (少し遅れて鳴る)
+                const osc2 = audioCtx.createOscillator();
+                const g2 = audioCtx.createGain();
+                osc2.frequency.setValueAtTime(1318, now + 0.1);
+                g2.gain.setValueAtTime(0.05, now + 0.1);
+                g2.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc2.connect(g2); g2.connect(audioCtx.destination);
+                osc2.start(now + 0.1); osc2.stop(now + 0.5);
+            }, 800);
         };
 
-        // --- 警笛 ---
-        document.getElementById('hornBtn').onclick = () => {
+        // --- 3. 警笛 (長押し対応 & 音量調整) ---
+        const startHorn = (e) => {
+            e.preventDefault();
             setupAudio();
-            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
-            const data = buffer.getChannelData(0);
-            for(let i=0; i<buffer.length; i++) {
-                data[i] = (Math.sin(2*Math.PI*660*(i/audioCtx.sampleRate)) + Math.sin(2*Math.PI*880*(i/audioCtx.sampleRate))) * 0.5;
-            }
-            play(buffer, 400);
+            if (hornOscs.length > 0) return;
+            hornGain = audioCtx.createGain();
+            hornGain.gain.setValueAtTime(0, audioCtx.currentTime);
+            hornGain.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.05); // 音量を0.1に抑制
+            
+            [660, 880].forEach(f => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+                osc.connect(hornGain);
+                osc.start();
+                hornOscs.push(osc);
+            });
+            hornGain.connect(audioCtx.destination);
         };
 
+        const stopHorn = () => {
+            if (hornGain) {
+                hornGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                const oldOscs = hornOscs;
+                setTimeout(() => oldOscs.forEach(o => o.stop()), 100);
+                hornOscs = [];
+            }
+        };
+
+        const hBtn = document.getElementById('hornBtn');
+        hBtn.onmousedown = startHorn; hBtn.onmouseup = stopHorn; hBtn.onmouseleave = stopHorn;
+        hBtn.ontouchstart = startHorn; hBtn.ontouchend = stopHorn;
+
+        // --- 停止 ---
         document.getElementById('stopBtn').onclick = () => {
-            clearInterval(intervals.ats);
-            clearInterval(intervals.door);
+            clearInterval(intervals.ats); clearInterval(intervals.door);
             intervals.ats = null; intervals.door = null;
             document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
             document.getElementById('stat').textContent = "SYSTEM READY";
