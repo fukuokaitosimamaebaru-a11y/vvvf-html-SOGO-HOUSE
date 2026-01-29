@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>30Hz IMPACT CANNON</title>
+    <title>30Hz IMPACT CANNON - MAX</title>
     <style>
         body { background: #000; color: #fff; text-align: center; font-family: 'Impact', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .module { border: 5px solid #ff00ff; padding: 50px; background: rgba(255,0,255,0.1); box-shadow: 0 0 50px #ff00ff; }
@@ -30,37 +30,33 @@
         btn.onclick = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             
-            // 30Hzの1周期分(約0.033秒)のバッファを作成
             const sampleRate = audioCtx.sampleRate;
             const periodSamples = Math.floor(sampleRate / 30); 
             const buffer = audioCtx.createBuffer(1, periodSamples, sampleRate);
             const data = buffer.getChannelData(0);
 
-            // 【超・往復動作】
-            // 最初の半分(16ms)で最大まで引き込み
+            // 【究極・二段階衝撃波形】
             const half = Math.floor(periodSamples / 2);
-            for (let i = 0; i < half; i++) {
-                data[i] = -1.0; 
-            }
-            // 後半の半分(16ms)で最大まで突き上げ
-            for (let i = half; i < periodSamples; i++) {
-                data[i] = 1.0; 
+            for (let i = 0; i < periodSamples; i++) {
+                // 前半で強烈に引き込み、後半で音速を超えて蹴り出す
+                data[i] = (i < half) ? -1.0 : 1.0; 
             }
 
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            const gain = audioCtx.createGain();
+            // 3つの並列回路で同時に発射（スタック攻撃）
+            for(let j = 0; j < 3; j++) {
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                const gain = audioCtx.createGain();
+                
+                // ブラウザ側のリミッターを突破するための超絶倍率（並列合計でさらに強化）
+                gain.gain.setValueAtTime(200.0, audioCtx.currentTime); 
 
-            // ゲインを限界（さらに倍）まで引き上げ
-            gain.gain.setValueAtTime(150.0, audioCtx.currentTime); 
+                source.connect(gain);
+                gain.connect(audioCtx.destination);
+                source.start();
+            }
 
-            source.connect(gain);
-            gain.connect(audioCtx.destination);
-
-            source.start();
-
-            // 演出
-            status.textContent = "IMPACT!!";
+            status.textContent = "MAX IMPACT!!";
             setTimeout(() => { status.textContent = "30Hz PHASE READY"; }, 500);
         };
     </script>
