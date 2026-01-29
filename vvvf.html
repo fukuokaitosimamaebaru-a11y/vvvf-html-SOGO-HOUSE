@@ -2,75 +2,48 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>統合シミュレーター - 完全復活版</title>
+    <title>極限再現：ATS-S 物理コンソール</title>
     <style>
         body { 
             background: #111; color: #000; font-family: 'MS Gothic', sans-serif;
-            margin: 0; overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+            margin: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh;
         }
-        .stage-container { display: inline-flex; height: 100vh; align-items: center; padding: 0 50vw; }
-        
         .panel { 
-            display: inline-block; background: #ffcc00; padding: 40px; border: 10px solid #000; 
-            box-shadow: 20px 20px 0 #444; width: 380px; vertical-align: middle; 
-            white-space: normal; margin: 0 100px;
+            background: #ffcc00; padding: 40px; border: 10px solid #000; 
+            box-shadow: 20px 20px 0 #444; width: 400px; 
         }
-
         h1 { font-size: 1.8rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
         .danger-stripes { height: 25px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 10px; }
-
         .btn-group { display: flex; flex-direction: column; gap: 15px; }
-        button { padding: 25px; font-size: 1.5rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; }
+        button { padding: 25px; font-size: 1.5rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; width: 100%; }
         
-        /* エリア別カラー */
-        .btn-ats { background: #ff8800; color: #000; }
-        .btn-vertical { background: #00ff00; color: #000; }
-        .btn-alarm { background: #d00; color: #fff; text-shadow: 0 0 10px #fff; }
-        .btn-stop { background: #fff; color: #000; }
+        .btn-ats { background: #ff8800; }
+        .btn-door { background: #00ff00; }
+        .btn-horn { background: #00aaff; color: #fff; }
+        .btn-stop { background: #fff; }
 
-        .active { animation: blink 0.2s infinite; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
-
-        .status-window { background: #000; color: #0f0; padding: 15px; font-family: monospace; margin: 15px 0; border: 2px solid #555; min-height: 3rem; }
+        .active { animation: emergency-blink 0.15s infinite; background: #ff0000 !important; color: #fff; }
+        @keyframes emergency-blink { 0% { filter: brightness(1); } 50% { filter: brightness(1.5); } 100% { filter: brightness(1); } }
+        .status { background: #000; color: #f00; padding: 10px; font-family: monospace; margin: 10px 0; border: 2px solid #f00; height: 1.5rem; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div class="stage-container">
-        <div class="panel">
-            <div class="danger-stripes"></div>
-            <h1>ATS-S 警報</h1>
-            <div class="status-window" id="atsStatus">READY</div>
-            <div class="btn-group">
-                <button id="atsBtn" class="btn-ats">ATS起動</button>
-                <button id="stopAts" class="btn-stop">警報確認</button>
-            </div>
-        </div>
-
-        <div class="panel">
-            <div class="danger-stripes"></div>
-            <h1>垂直射出・最強</h1>
-            <div class="status-window" id="vStatus">STANDBY</div>
-            <div class="btn-group">
-                <button id="vBtn" class="btn-vertical">連射開始</button>
-                <button id="stopV" class="btn-stop">緊急終了</button>
-            </div>
-        </div>
-
-        <div class="panel">
-            <div class="danger-stripes"></div>
-            <h1>非常警報【極】</h1>
-            <div class="status-window" id="aStatus">STABLE</div>
-            <div class="btn-group">
-                <button id="alarmBtn" class="btn-alarm">警報発令</button>
-                <button id="stopAlarm" class="btn-stop">停止</button>
-            </div>
+    <div class="panel">
+        <div class="danger-stripes"></div>
+        <h1>ATS-S 物理再現機</h1>
+        <div class="status" id="stat">SYSTEM READY</div>
+        <div class="btn-group">
+            <button id="atsBtn" class="btn-ats">ATS起動(超リアル)</button>
+            <button id="doorBtn" class="btn-door">戸締めベル</button>
+            <button id="hornBtn" class="btn-horn">警笛</button>
+            <button id="stopBtn" class="btn-stop">復帰 (停止)</button>
         </div>
     </div>
 
     <script>
         let audioCtx;
-        let intervals = { ats: null, v: null, alarm: null };
+        let intervals = { ats: null, door: null };
 
         const setupAudio = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -86,75 +59,72 @@
             source.start();
         };
 
-        // --- 垂直射出ロジック ---
-        document.getElementById('vBtn').onclick = () => {
-            setupAudio();
-            if (intervals.v) return;
-            document.getElementById('vStatus').textContent = "FIRING: 25Hz";
-            document.getElementById('vBtn').classList.add('active');
-            intervals.v = setInterval(() => {
-                const period = Math.floor(audioCtx.sampleRate / 25);
-                const buffer = audioCtx.createBuffer(1, period, audioCtx.sampleRate);
-                const data = buffer.getChannelData(0);
-                const pull = Math.floor(period * 0.8);
-                for(let i=0; i<period; i++) data[i] = (i < pull) ? -1.0 : 1.0;
-                for(let j=0; j<8; j++) play(buffer, 500);
-            }, 40);
-        };
-
-        // --- 火災報知器ロジック ---
-        document.getElementById('alarmBtn').onclick = () => {
-            setupAudio();
-            if (intervals.alarm) return;
-            document.getElementById('aStatus').textContent = "WARNING: FIRE";
-            document.getElementById('alarmBtn').classList.add('active');
-            intervals.alarm = setInterval(() => {
-                const duration = audioCtx.sampleRate * 0.05;
-                const buffer = audioCtx.createBuffer(1, duration, audioCtx.sampleRate);
-                const data = buffer.getChannelData(0);
-                for(let i=0; i<duration; i++) {
-                    const impact = Math.exp(-i / 500) * (i % 2 === 0 ? 1 : -1);
-                    const ringing = Math.sin(2 * Math.PI * 3000 * (i / audioCtx.sampleRate)) * Math.exp(-i / 1500);
-                    data[i] = (impact * 0.7) + (ringing * 0.3);
-                }
-                play(buffer, 400);
-            }, 60);
-        };
-
-        // --- ATS-Sロジック ---
+        // --- 超リアルATS-Sロジック ---
         document.getElementById('atsBtn').onclick = () => {
             setupAudio();
             if (intervals.ats) return;
             document.getElementById('atsBtn').classList.add('active');
             let t = 0;
             intervals.ats = setInterval(() => {
-                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
+                const sampleRate = audioCtx.sampleRate;
+                const buffer = audioCtx.createBuffer(1, sampleRate * 0.18, sampleRate);
                 const data = buffer.getChannelData(0);
-                if (t < 10) {
-                    document.getElementById('atsStatus').textContent = "ジロジロジロ...";
-                    for(let i=0; i<buffer.length; i++) data[i] = (Math.sin(2*Math.PI*1100*(i/audioCtx.sampleRate)) + Math.sin(2*Math.PI*1120*(i/audioCtx.sampleRate))) > 0 ? 1 : -1;
+
+                if (t < 12) {
+                    document.getElementById('stat').textContent = "ATS: 警告ジロジロ...";
+                    for(let i=0; i<buffer.length; i++) {
+                        const time = i / sampleRate;
+                        // 3種類の不協和音による激しいうねり
+                        const s1 = Math.sin(2 * Math.PI * 1100 * time);
+                        const s2 = Math.sin(2 * Math.PI * 1115 * time);
+                        const s3 = Math.sin(2 * Math.PI * 1132 * time);
+                        const mix = (s1 + s2 + s3) / 3;
+                        // 矩形波的なクリッピングで物理打撃感を強調
+                        data[i] = mix > 0.1 ? 1 : mix < -0.1 ? -1 : 0;
+                    }
                 } else {
-                    document.getElementById('atsStatus').textContent = "ピッロ ピッロ...";
-                    const f = (t % 2 === 0) ? 1300 : 1000;
-                    for(let i=0; i<buffer.length; i++) data[i] = Math.sin(2*Math.PI*f*(i/audioCtx.sampleRate)) > 0 ? 1 : -1;
+                    document.getElementById('stat').textContent = "ATS: ピッロ ピッロ...";
+                    const f = (t % 2 === 0) ? 1320 : 1050; // 少し周波数をずらして実機感
+                    for(let i=0; i<buffer.length; i++) {
+                        data[i] = Math.sin(2 * Math.PI * f * (i / sampleRate)) > 0 ? 1 : -1;
+                    }
                 }
-                play(buffer, 300);
+                play(buffer, 350);
                 t++;
-            }, 180);
+            }, 175);
         };
 
-        // 停止処理
-        const stop = (id, intervalKey, statusId, statusText) => {
-            clearInterval(intervals[intervalKey]);
-            intervals[intervalKey] = null;
-            document.getElementById(id).classList.remove('active');
-            document.getElementById(statusId).textContent = statusText;
+        // --- 戸締めベル ---
+        document.getElementById('doorBtn').onclick = () => {
+            setupAudio();
+            if (intervals.door) return;
+            document.getElementById('doorBtn').classList.add('active');
+            intervals.door = setInterval(() => {
+                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for(let i=0; i<buffer.length; i++) data[i] = Math.sin(2 * Math.PI * 2500 * (i / audioCtx.sampleRate)) > 0 ? 1 : -1;
+                play(buffer, 200);
+            }, 80);
         };
 
-        document.getElementById('stopV').onclick = () => stop('vBtn', 'v', 'vStatus', 'STANDBY');
-        document.getElementById('stopAlarm').onclick = () => stop('alarmBtn', 'alarm', 'aStatus', 'STABLE');
-        document.getElementById('stopAts').onclick = () => stop('atsBtn', 'ats', 'atsStatus', 'READY');
+        // --- 警笛 ---
+        document.getElementById('hornBtn').onclick = () => {
+            setupAudio();
+            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 1.5, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for(let i=0; i<buffer.length; i++) {
+                data[i] = (Math.sin(2*Math.PI*660*(i/audioCtx.sampleRate)) + Math.sin(2*Math.PI*880*(i/audioCtx.sampleRate))) * 0.5;
+            }
+            play(buffer, 400);
+        };
 
+        document.getElementById('stopBtn').onclick = () => {
+            clearInterval(intervals.ats);
+            clearInterval(intervals.door);
+            intervals.ats = null; intervals.door = null;
+            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            document.getElementById('stat').textContent = "SYSTEM READY";
+        };
     </script>
 </body>
 </html>
