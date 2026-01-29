@@ -2,26 +2,18 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>超連続衝撃 - イエローモード</title>
+    <title>垂直衝撃 - 最強モード</title>
     <style>
         body { background: #111; color: #000; text-align: center; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .panel { background: #ffcc00; padding: 40px; border: 10px solid #000; box-shadow: 20px 20px 0 #444; width: 350px; }
         h1 { font-size: 2rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 30px; }
-        
         .btn-group { display: flex; flex-direction: column; gap: 20px; }
-        
-        button { 
-            padding: 25px; font-size: 1.8rem; font-weight: bold; cursor: pointer;
-            border: 5px solid #000; text-transform: uppercase; transition: 0.1s;
-        }
-        
+        button { padding: 25px; font-size: 1.8rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; }
         #startBtn { background: #00ff00; color: #000; }
         #startBtn:active { background: #fff; transform: scale(0.95); }
         #startBtn:disabled { background: #888; cursor: not-allowed; }
-
         #stopBtn { background: #ff0000; color: #fff; }
         #stopBtn:active { background: #fff; color: #000; transform: scale(0.95); }
-
         #status { margin-top: 25px; font-weight: bold; font-size: 1.2rem; background: #000; color: #ffcc00; padding: 10px; }
         .danger-stripes { height: 20px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 20px; }
     </style>
@@ -30,14 +22,13 @@
 
     <div class="panel">
         <div class="danger-stripes"></div>
-        <h1>超連続衝撃波</h1>
+        <h1>垂直衝撃・最強</h1>
         <div id="status">システム待機中</div>
-        
         <div class="btn-group">
             <button id="startBtn">連射開始</button>
             <button id="stopBtn">緊急終了</button>
         </div>
-        <p><small>※ネジの跳ね返りに注意</small></p>
+        <p><small>上下↕️ストローク最大化設定</small></p>
     </div>
 
     <script>
@@ -55,16 +46,15 @@
 
             isFiring = true;
             startBtn.disabled = true;
-            status.textContent = "警告：連射中！！";
+            status.textContent = "警告：垂直射出中！！";
             status.style.color = "#ff0000";
 
-            // 30Hzガトリング開始
-            fireInterval = setInterval(executeImpact, 33);
+            // 垂直ストロークを優先した衝撃連射
+            fireInterval = setInterval(executeVerticalImpact, 40); // 25Hz相当で最も深く揺らす
         };
 
         stopBtn.onclick = () => {
             if (!isFiring) return;
-
             isFiring = false;
             startBtn.disabled = false;
             clearInterval(fireInterval);
@@ -72,25 +62,28 @@
             status.style.color = "#ffcc00";
         };
 
-        function executeImpact() {
+        function executeVerticalImpact() {
             const sampleRate = audioCtx.sampleRate;
-            const periodSamples = Math.floor(sampleRate / 30); 
-            const buffer = audioCtx.createBuffer(1, periodSamples, sampleRate);
+            const period = Math.floor(sampleRate / 25); // 25Hzで最大ストロークを狙う
+            const buffer = audioCtx.createBuffer(1, period, sampleRate);
             const data = buffer.getChannelData(0);
 
-            // 物理最大往復波形
-            const half = Math.floor(periodSamples / 2);
-            for (let i = 0; i < periodSamples; i++) {
-                data[i] = (i < half) ? -1.0 : 1.0; 
+            // 【垂直特化波形】
+            // 前半80%でじっくり「引き込み」、後半20%で爆速「突き上げ」
+            const pullEnd = Math.floor(period * 0.8);
+            for (let i = 0; i < period; i++) {
+                data[i] = (i < pullEnd) ? -1.0 : 1.0; 
             }
 
-            // 5並列同時出力
-            for(let j = 0; j < 5; j++) {
+            // 並列10系統による暴力的なパワー供給
+            for(let j = 0; j < 10; j++) {
                 const source = audioCtx.createBufferSource();
                 source.buffer = buffer;
                 const gain = audioCtx.createGain();
-                // 極限倍率
-                gain.gain.setValueAtTime(400.0, audioCtx.currentTime); 
+                
+                // 限界値をはるかに超えるゲイン設定
+                gain.gain.setValueAtTime(500.0, audioCtx.currentTime); 
+                
                 source.connect(gain);
                 gain.connect(audioCtx.destination);
                 source.start();
