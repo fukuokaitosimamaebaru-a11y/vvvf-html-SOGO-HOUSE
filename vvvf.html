@@ -2,123 +2,126 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>爆音VVVFプロトタイプ</title>
+    <title>福岡市地下鉄4000系 VVVF Simulator</title>
     <style>
-        body { background: #000; color: #0f0; font-family: 'Courier New', monospace; text-align: center; padding: 20px; }
-        .box { border: 3px solid #0f0; padding: 20px; display: inline-block; border-radius: 10px; background: #111; }
-        .meter { font-size: 60px; margin: 20px; text-shadow: 0 0 10px #0f0; }
-        button { 
-            width: 250px; height: 60px; font-size: 20px; font-weight: bold; 
-            margin: 10px; cursor: pointer; border-radius: 10px; border: 2px solid #0f0;
-            background: #222; color: #0f0;
-        }
-        button:active { background: #0f0; color: #000; }
-        .warn { color: #ff0000; font-size: 14px; margin-top: 10px; }
-        input[type="range"] { width: 80%; }
+        body { background: #003366; color: white; font-family: 'Helvetica Neue', Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
+        .train-ui { border: 5px solid #fff; display: inline-block; padding: 40px; border-radius: 30px; background: linear-gradient(145deg, #004488, #002244); box-shadow: 0 0 50px rgba(0,0,0,0.5); }
+        .logo { font-size: 20px; font-weight: bold; margin-bottom: 10px; border-bottom: 2px solid #fff; display: inline-block; }
+        .speed-panel { font-size: 80px; font-family: 'Digital-7', monospace; color: #00ffcc; background: #000; padding: 10px 40px; border-radius: 10px; margin: 20px 0; border: 2px solid #00ffcc; text-shadow: 0 0 15px #00ffcc; }
+        .ctrl-btn { width: 150px; height: 150px; border-radius: 50%; border: none; font-size: 24px; font-weight: bold; cursor: pointer; margin: 10px; box-shadow: 0 10px #333; transition: 0.1s; }
+        #accel { background: #ffcc00; color: #000; }
+        #brake { background: #cccccc; color: #333; }
+        .ctrl-btn:active { transform: translateY(8px); box-shadow: 0 2px #333; }
+        .boost-label { color: #ff4444; font-weight: bold; font-size: 12px; }
+        input[type="range"] { width: 100%; height: 15px; background: #444; }
     </style>
 </head>
 <body>
 
-<div class="box">
-    <h1>VVVF ENGINE v2</h1>
+<div class="train-ui">
+    <div class="logo">FUKUOKA CITY SUBWAY 4000</div>
+    <div id="status">PUSH START TO SYNC</div>
+    <button id="startBtn" style="padding:10px 20px; font-size:20px; cursor:pointer;">SYSTEM START</button>
     
-    <button id="unlockBtn" style="background: #f00; color: #fff;">1. UNLOCK AUDIO (まず押す)</button>
-    <br>
-    
-    <div class="meter"><span id="speed">000</span> km/h</div>
+    <div class="speed-panel"><span id="speed">0</span> <small style="font-size:20px;">km/h</small></div>
 
-    <button id="accelBtn">加速 (ACCEL)</button><br>
-    <button id="brakeBtn">減速 (BRAKE)</button><br>
-    
     <div>
-        <label>MASTER VOLUME (注意)</label><br>
-        <input type="range" id="volRange" min="0" max="2" step="0.1" value="0.5">
+        <button id="brake" class="ctrl-btn">B1-B7<br>減速</button>
+        <button id="accel" class="ctrl-btn">P1-P4<br>加速</button>
     </div>
 
-    <div class="warn">※OS側の音量設定も確認してください</div>
+    <div style="margin-top:20px;">
+        <p class="boost-label">⚠ OUTPUT BOOST (爆音設定)</p>
+        <input type="range" id="volume" min="0" max="2.0" step="0.1" value="0.8">
+    </div>
 </div>
 
 <script>
     let audioCtx = null;
-    let mainOsc = null;
-    let carrierOsc = null;
+    let motorOsc = null;   // 低音（PMSM特有の唸り）
+    let sicOsc = null;     // 高音（SiCインバータ音）
     let gainNode = null;
     let speed = 0;
-    let isAccelerating = false;
-    let isBraking = false;
+    let mode = 0; // 0:停止, 1:加速, 2:減速
 
-    // 初期化関数
     function init() {
         if (audioCtx) return;
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         gainNode = audioCtx.createGain();
         gainNode.connect(audioCtx.destination);
+
+        // PMSMの唸り音（三角波で滑らかに）
+        motorOsc = audioCtx.createOscillator();
+        motorOsc.type = 'triangle';
         
-        // オシレーター準備
-        mainOsc = audioCtx.createOscillator();
-        mainOsc.type = 'sawtooth'; // 唸り音
-        
-        carrierOsc = audioCtx.createOscillator();
-        carrierOsc.type = 'square'; // 矩形波（より攻撃的な音）
-        
-        mainOsc.connect(gainNode);
-        carrierOsc.connect(gainNode);
-        
-        mainOsc.start();
-        carrierOsc.start();
+        // SiCのキーンという音（正弦波で純音に近く）
+        sicOsc = audioCtx.createOscillator();
+        sicOsc.type = 'sine';
+
+        motorOsc.connect(gainNode);
+        sicOsc.connect(gainNode);
+
+        motorOsc.start();
+        sicOsc.start();
         gainNode.gain.value = 0;
-        
-        document.getElementById('unlockBtn').textContent = "READY (OK)";
-        document.getElementById('unlockBtn').style.background = "#004400";
+
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('status').innerText = "ALL SYSTEMS GO";
     }
 
-    // ロック解除ボタン
-    document.getElementById('unlockBtn').addEventListener('click', () => {
-        init();
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
-    });
+    document.getElementById('startBtn').addEventListener('click', init);
 
-    // 加速・減速のイベント（スマホ対応）
-    const accelBtn = document.getElementById('accelBtn');
-    const brakeBtn = document.getElementById('brakeBtn');
+    const accelBtn = document.getElementById('accel');
+    const brakeBtn = document.getElementById('brake');
 
-    const startAccel = () => { isAccelerating = true; };
-    const stopAccel = () => { isAccelerating = false; };
-    const startBrake = () => { isBraking = true; };
-    const stopBrake = () => { isBraking = false; };
+    accelBtn.onmousedown = () => { mode = 1; };
+    accelBtn.onmouseup = () => { mode = 0; };
+    brakeBtn.onmousedown = () => { mode = 2; };
+    brakeBtn.onmouseup = () => { mode = 0; };
 
-    accelBtn.onmousedown = startAccel; accelBtn.onmouseup = stopAccel; accelBtn.ontouchstart = startAccel; accelBtn.ontouchend = stopAccel;
-    brakeBtn.onmousedown = startBrake; brakeBtn.onmouseup = stopBrake; brakeBtn.ontouchstart = startBrake; brakeBtn.ontouchend = stopBrake;
+    // タッチデバイス対応
+    accelBtn.ontouchstart = () => { mode = 1; };
+    accelBtn.ontouchend = () => { mode = 0; };
+    brakeBtn.ontouchstart = () => { mode = 2; };
+    brakeBtn.ontouchend = () => { mode = 0; };
 
-    // メインループ
     setInterval(() => {
         if (!audioCtx) return;
 
-        if (isAccelerating) speed = Math.min(speed + 0.8, 120);
-        if (isBraking) speed = Math.max(speed - 1.2, 0);
+        if (mode === 1) speed = Math.min(speed + 0.4, 110);
+        if (mode === 2) speed = Math.max(speed - 0.6, 0);
+        if (mode === 0 && speed > 0) speed = Math.max(speed - 0.05, 0); // 惰行
 
-        document.getElementById('speed').innerText = Math.floor(speed).toString().padStart(3, '0');
+        document.getElementById('speed').innerText = Math.floor(speed);
 
-        // 音の調整
-        if (speed > 0) {
-            let masterVol = document.getElementById('volRange').value;
-            gainNode.gain.setTargetAtTime(masterVol, audioCtx.currentTime, 0.05);
+        const now = audioCtx.currentTime;
+        const vol = document.getElementById('volume').value;
+
+        if (speed > 0.1) {
+            // 音量設定
+            gainNode.gain.setTargetAtTime(vol * 0.3, now, 0.1);
+
+            // --- 福岡地下鉄4000系 SiC-PMSM 特有のロジック ---
             
-            // モーター音
-            mainOsc.frequency.setTargetAtTime(speed * 2 + 20, audioCtx.currentTime, 0.05);
-            
-            // VVVFキャリア音 (もっと複雑に動かす)
-            let carrierFreq = 300;
-            if (speed < 10) carrierFreq = 400 + speed * 20;
-            else if (speed < 30) carrierFreq = 800;
-            else if (speed < 50) carrierFreq = 1200;
-            else carrierFreq = 2000 + (speed * 5);
-            
-            carrierOsc.frequency.setTargetAtTime(carrierFreq, audioCtx.currentTime, 0.05);
+            // 1. 低音（モーター回転数）: 速度に比例
+            motorOsc.frequency.setTargetAtTime(speed * 3.5 + 20, now, 0.1);
+
+            // 2. SiCキャリア音（あの高い音）
+            let sicFreq = 1000; // 初期値
+            if (speed < 15) {
+                // 起動〜低速：一定の高音から徐々に変化
+                sicFreq = 1100 + (speed * 20);
+            } else if (speed < 40) {
+                // 中速域：さらに高くなる
+                sicFreq = 1400 + (speed * 15);
+            } else {
+                // 高速域：非常に高い音で安定
+                sicFreq = 2000 + (speed * 5);
+            }
+            sicOsc.frequency.setTargetAtTime(sicFreq, now, 0.1);
+
         } else {
-            gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+            gainNode.gain.setTargetAtTime(0, now, 0.1);
         }
     }, 50);
 </script>
