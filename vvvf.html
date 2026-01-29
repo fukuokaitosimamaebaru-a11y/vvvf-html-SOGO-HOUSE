@@ -2,85 +2,112 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>MAX LEVEL VIBRATOR</title>
+    <title>SHINDO 7 - MAXIMUM QUAKE</title>
     <style>
         body { 
-            font-family: 'Arial Black', sans-serif; 
-            text-align: center; 
-            background: #000; 
-            color: #ff0000; 
-            overflow: hidden;
-            display: flex; flex-direction: column; justify-content: center; height: 100vh;
+            margin: 0; background: #000; color: #fff; 
+            font-family: 'Courier New', Courier, monospace;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden;
         }
-        /* 画面を激しく揺らすアニメーション */
-        @keyframes shake {
-            0% { transform: translate(0, 0); }
-            25% { transform: translate(5px, -5px); }
-            50% { transform: translate(-5px, 5px); }
-            75% { transform: translate(5px, 5px); }
-            100% { transform: translate(0, 0); }
+        #warning-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 0, 0, 0.2); pointer-events: none; opacity: 0;
         }
-        .vibrating { animation: shake 0.05s infinite; background: #200; }
-
-        h1 { font-size: 3rem; text-shadow: 0 0 20px #f00; }
-        button { 
-            padding: 30px 60px; font-size: 30px; font-weight: bold;
-            cursor: pointer; background: #ff0000; border: none; color: #000; 
-            border-radius: 50px; box-shadow: 0 0 30px #f00; transition: 0.2s;
+        h1 { font-size: 4rem; margin: 0; color: #ff0000; text-shadow: 0 0 20px #f00; }
+        button {
+            padding: 40px 80px; font-size: 2rem; font-weight: bold;
+            background: #ff0000; color: #fff; border: 5px solid #fff;
+            cursor: pointer; transition: 0.1s; z-index: 100;
         }
-        button:active { transform: scale(0.9); }
-        .warning { color: #ffcc00; margin-top: 20px; font-weight: bold; }
+        button:hover { background: #fff; color: #ff0000; }
+        .shaking { animation: seismic 0.04s infinite; }
+        @keyframes seismic {
+            0% { transform: translate(4px, 4px) rotate(0deg); }
+            25% { transform: translate(-4px, -4px) rotate(1deg); }
+            50% { transform: translate(4px, -4px) rotate(-1deg); }
+            75% { transform: translate(-4px, 4px) rotate(0deg); }
+            100% { transform: translate(4px, 4px) rotate(0deg); }
+        }
     </style>
 </head>
 <body>
 
-    <h1>MAX LEVEL</h1>
-    <p>矩形波(Square Wave)による最大振幅</p>
-    
-    <div>
-        <button id="toggleBtn">OVERDRIVE START</button>
-    </div>
-
-    <div class="warning">
-        ⚠️ WARNING: スピーカーの破損に注意してください
-    </div>
+    <div id="warning-screen"></div>
+    <h1 id="status">SHINDO 7</h1>
+    <p>OBJECTS MAY FALL - PROTECT YOUR HEAD</p>
+    <button id="quakeBtn">QUAKE START</button>
 
     <script>
         let audioCtx;
-        let oscillator;
-        let gainNode;
         let isPlaying = false;
+        let timer;
 
-        const btn = document.getElementById('toggleBtn');
+        const btn = document.getElementById('quakeBtn');
+        const status = document.getElementById('status');
+        const warning = document.getElementById('warning-screen');
+
+        const startQuake = () => {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            // 1. メインの揺れ（オシレーター）
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square'; 
+            gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+
+            // 2. 地鳴りノイズ（ブラウンノイズ）
+            const bufferSize = 2 * audioCtx.sampleRate;
+            const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            let lastOut = 0;
+            for (let i = 0; i < bufferSize; i++) {
+                let white = Math.random() * 2 - 1;
+                output[i] = (lastOut + (0.02 * white)) / 1.02;
+                lastOut = output[i];
+                output[i] *= 3.5; // 音量を増幅
+            }
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+            noise.loop = true;
+            const noiseGain = audioCtx.createGain();
+            noiseGain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+
+            // 3. 不規則な揺れの変調
+            timer = setInterval(() => {
+                const randomFreq = Math.random() * 50 + 10; // 10Hz-60Hz
+                osc.frequency.exponentialRampToValueAtTime(randomFreq, audioCtx.currentTime + 0.05);
+            }, 50);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            noise.connect(noiseGain);
+            noiseGain.connect(audioCtx.destination);
+
+            osc.start();
+            noise.start();
+
+            return { osc, noise, stop: () => {
+                osc.stop();
+                noise.stop();
+                clearInterval(timer);
+            }};
+        };
+
+        let quakeInstance;
 
         btn.addEventListener('click', () => {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-
             if (!isPlaying) {
-                oscillator = audioCtx.createOscillator();
-                gainNode = audioCtx.createGain();
-
-                // 矩形波 (Square Wave) は最も振動が激しい波形です
-                oscillator.type = 'square'; 
-                // 35Hz付近が物理的な振動と音圧のバランスが最強です
-                oscillator.frequency.setValueAtTime(35, audioCtx.currentTime);
-
-                // 利得(Gain)を1.0（最大）に設定
-                gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
-
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-
-                oscillator.start();
-                document.body.classList.add('vibrating');
-                btn.textContent = "STOP";
+                quakeInstance = startQuake();
+                document.body.classList.add('shaking');
+                warning.style.opacity = "1";
+                btn.textContent = "STOP QUAKE";
                 isPlaying = true;
             } else {
-                oscillator.stop();
-                document.body.classList.remove('vibrating');
-                btn.textContent = "OVERDRIVE START";
+                quakeInstance.stop();
+                document.body.classList.remove('shaking');
+                warning.style.opacity = "0";
+                btn.textContent = "QUAKE START";
                 isPlaying = false;
             }
         });
