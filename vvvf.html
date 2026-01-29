@@ -2,92 +2,54 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>BOLT CANNON - ULTIMATE</title>
+    <title>ULTIMATE IMPACT</title>
     <style>
-        body { background: #000; color: #fff; text-align: center; font-family: 'Impact', sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; justify-content: center; }
-        .trigger-area { position: relative; width: 300px; height: 300px; margin: 0 auto; }
-        .fire-btn { 
-            width: 250px; height: 250px; border-radius: 50%;
-            background: radial-gradient(circle, #ff0000 0%, #330000 100%);
-            border: 8px solid #555; color: #fff; font-size: 3rem; font-weight: bold;
-            cursor: pointer; box-shadow: 0 10px 40px rgba(255, 0, 0, 0.6);
-            transition: 0.1s; position: absolute; top: 25px; left: 25px; z-index: 10;
+        body { background: #000; color: #fff; text-align: center; font-family: 'Impact', sans-serif; display: flex; flex-direction: column; justify-content: center; height: 100vh; margin: 0; }
+        .power-btn { 
+            width: 300px; height: 300px; border-radius: 50%;
+            background: linear-gradient(145deg, #ff0000, #880000);
+            border: 15px solid #fff; color: white; font-size: 4rem;
+            cursor: pointer; box-shadow: 0 0 100px #f00;
         }
-        .fire-btn:active { transform: scale(0.95); box-shadow: 0 0 80px #f00; filter: brightness(1.5); }
-        .charging-ring {
-            width: 290px; height: 290px; border: 5px solid transparent;
-            border-top: 5px solid #f00; border-radius: 50%;
-            position: absolute; top: 0; left: 0; animation: spin 0.5s linear infinite;
-        }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-        .flash-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; opacity: 0; pointer-events: none; z-index: 100; }
-        #status { font-size: 1.5rem; color: #f00; margin-top: 30px; letter-spacing: 5px; }
+        .power-btn:active { transform: scale(0.9); filter: brightness(2); }
+        #log { margin-top: 20px; color: #f00; font-size: 1.2rem; }
     </style>
 </head>
 <body>
 
-    <div class="flash-overlay" id="flash"></div>
-    <div class="trigger-area">
-        <div class="charging-ring"></div>
-        <button class="fire-btn" id="fireBtn">LAUNCH</button>
-    </div>
-    <div id="status">ENERGY STABILIZED</div>
+    <button class="power-btn" id="impactBtn">極</button>
+    <div id="log">STANDBY... (VOLUME MAX RECOMMENDED)</div>
 
     <script>
         let audioCtx;
-        const fireBtn = document.getElementById('fireBtn');
-        const flash = document.getElementById('flash');
-        const status = document.getElementById('status');
+        const btn = document.getElementById('impactBtn');
 
-        fireBtn.onmousedown = () => {
+        btn.onclick = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            status.textContent = "LOCK ON";
-        };
-
-        fireBtn.onclick = () => {
-            // 発射！
-            executeLaunch();
             
-            // 視覚的な爆発
-            flash.style.opacity = "1";
-            status.textContent = "FIRE!!";
-            setTimeout(() => {
-                flash.style.opacity = "0";
-                status.textContent = "RECHARGING...";
-                setTimeout(() => { status.textContent = "READY"; }, 500);
-            }, 50);
-        };
-
-        function executeLaunch() {
-            const bufferSize = audioCtx.sampleRate * 0.05; // 0.05秒に凝縮
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            // 物理的に最も衝撃が強い「ステップ波形」を生成
+            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
 
-            // スピーカーの物理限界を攻める「超インパルス」
-            for (let i = 0; i < bufferSize; i++) {
-                if (i < 50) {
-                    // 最初にガツンとマイナスに引き込み（タメ）
-                    data[i] = -1.0;
-                } else if (i < 300) {
-                    // 瞬時にプラス最大へ蹴り出し（爆発）
-                    data[i] = 1.0;
-                } else {
-                    // 急ブレーキ
-                    data[i] = 0;
-                }
+            // 0.005秒間だけ、スピーカーを「押し切る」ための最大出力を固定
+            // これが「ハンマーで叩く」ような衝撃を生みます
+            for (let i = 0; i < 200; i++) {
+                data[i] = 1.0; 
             }
 
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
+
             const gain = audioCtx.createGain();
-            
-            // ゲインを限界（20倍）まで引き上げ
-            gain.gain.setValueAtTime(20.0, audioCtx.currentTime);
-            
+            // ブラウザのリミッターを完全に無視する超高倍率
+            gain.gain.setValueAtTime(50.0, audioCtx.currentTime); 
+
             source.connect(gain);
             gain.connect(audioCtx.destination);
+            
             source.start();
-        }
+            document.getElementById('log').textContent = "MAX IMPACT RELEASED!";
+        };
     </script>
 </body>
 </html>
