@@ -2,143 +2,76 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Fukuoka 4000 Mascon Sim</title>
+    <title>Speaker Vibrator</title>
     <style>
-        body { background: #1a1a1a; color: white; font-family: sans-serif; text-align: center; user-select: none; }
-        .mascon-container { border: 4px solid #333; display: inline-block; padding: 20px; border-radius: 20px; background: #2a2a2a; margin-top: 20px; }
-        .notch-display { font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #ffcc00; }
-        .speed-meter { font-size: 64px; background: #000; color: #00ffcc; padding: 10px 30px; border: 2px solid #00ffcc; border-radius: 10px; font-family: monospace; margin-bottom: 20px; }
-        
-        /* マスコンスライダーの外観 */
-        input[type="range"].mascon-slider {
-            writing-mode: bt-lr; /* 縦向き */
-            -webkit-appearance: slider-vertical;
-            width: 80px; height: 300px; padding: 0 10px;
-        }
-
-        .labels { display: flex; flex-direction: column; justify-content: space-between; height: 300px; font-weight: bold; font-family: monospace; }
-        .main-flex { display: flex; align-items: center; justify-content: center; gap: 20px; }
-        .btn-start { background: #cc0000; color: white; border: none; padding: 15px 30px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; background: #111; color: #fff; }
+        button { padding: 20px 40px; font-size: 20px; cursor: pointer; background: #ff4444; border: none; color: white; border-radius: 10px; }
+        input { width: 300px; }
+        .controls { margin-top: 30px; }
     </style>
 </head>
 <body>
 
-<div class="mascon-container">
-    <div id="status">PRESS START</div>
-    <button id="startBtn" class="btn-start">起動 (START)</button>
+    <h1>Speaker Vibrator</h1>
+    <p>低周波でスピーカーを物理的に震わせます。</p>
     
-    <div class="speed-meter"><span id="speed">0</span> <small>km/h</small></div>
-    <div class="notch-display" id="notchLabel">N (ニュートラル)</div>
+    <button id="toggleBtn">再生 / 停止</button>
 
-    <div class="main-flex">
-        <div class="labels">
-            <div style="color:#ff4444">P5</div>
-            <div>P1</div>
-            <div style="color:#ffffff">N</div>
-            <div>B1</div>
-            <div style="color:#4444ff">B7</div>
-            <div style="color:#ff0000">Eb</div>
-        </div>
-        <input type="range" id="mascon" class="mascon-slider" min="-8" max="5" value="0" step="1">
+    <div class="controls">
+        <p>周波数: <span id="freqVal">30</span>Hz</p>
+        <input type="range" id="freqSlider" min="20" max="100" value="30">
+        <p><small>※20Hz〜60Hzが最も震えます</small></p>
     </div>
 
-    <div style="margin-top:20px;">
-        <label>VOLUME</label><br>
-        <input type="range" id="vol" min="0" max="1.5" step="0.1" value="0.7">
-    </div>
-</div>
+    <script>
+        let audioCtx;
+        let oscillator;
+        let gainNode;
+        let isPlaying = false;
 
-<script>
-    let audioCtx = null;
-    let motorOsc = null;
-    let sicOsc = null;
-    let gainNode = null;
-    
-    let speed = 0;
-    let notch = 0;
+        const toggleBtn = document.getElementById('toggleBtn');
+        const freqSlider = document.getElementById('freqSlider');
+        const freqVal = document.getElementById('freqVal');
 
-    const startBtn = document.getElementById('startBtn');
-    const mascon = document.getElementById('mascon');
-    const notchLabel = document.getElementById('notchLabel');
-    const speedDisp = document.getElementById('speed');
+        toggleBtn.addEventListener('click', () => {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
 
-    function init() {
-        if (audioCtx) return;
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        gainNode = audioCtx.createGain();
-        gainNode.connect(audioCtx.destination);
+            if (!isPlaying) {
+                // オシレーター作成
+                oscillator = audioCtx.createOscillator();
+                gainNode = audioCtx.createGain();
 
-        motorOsc = audioCtx.createOscillator();
-        motorOsc.type = 'triangle';
-        sicOsc = audioCtx.createOscillator();
-        sicOsc.type = 'sine';
+                // 波形の設定（sine = 滑らか, square = 激しい）
+                oscillator.type = 'sine'; 
+                oscillator.frequency.setValueAtTime(freqSlider.value, audioCtx.currentTime);
 
-        motorOsc.connect(gainNode);
-        sicOsc.connect(gainNode);
+                // 音量の設定
+                gainNode.gain.setValueAtTime(0.8, audioCtx.currentTime);
 
-        motorOsc.start();
-        sicOsc.start();
-        gainNode.gain.value = 0;
-        
-        startBtn.style.display = 'none';
-        document.getElementById('status').innerText = "SYSTEM ONLINE";
-    }
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
 
-    startBtn.addEventListener('click', init);
+                oscillator.start();
+                toggleBtn.textContent = "停止";
+                toggleBtn.style.background = "#444";
+                isPlaying = true;
+            } else {
+                oscillator.stop();
+                isPlaying = false;
+                toggleBtn.textContent = "再生 / 停止";
+                toggleBtn.style.background = "#ff4444";
+            }
+        });
 
-    // ノッチのラベル表示更新
-    mascon.addEventListener('input', () => {
-        notch = parseInt(mascon.value);
-        if (notch > 0) notchLabel.innerText = "P" + notch;
-        else if (notch === 0) notchLabel.innerText = "N (ニュートラル)";
-        else if (notch > -8) notchLabel.innerText = "B" + Math.abs(notch);
-        else notchLabel.innerText = "Eb (非常ブレーキ)";
-    });
-
-    setInterval(() => {
-        if (!audioCtx) return;
-
-        // --- 物理演算部 ---
-        if (notch > 0) {
-            // 加速（P1〜P5）
-            speed += (notch * 0.15); 
-        } else if (notch < 0) {
-            // ブレーキ（B1〜B7, Eb）
-            let brakePower = Math.abs(notch) * 0.25;
-            if (notch === -8) brakePower = 2.0; // Ebの強力な減速
-            speed = Math.max(speed - brakePower, 0);
-        } else {
-            // 自然減速（空気抵抗など）
-            speed = Math.max(speed - 0.02, 0);
-        }
-
-        if (speed > 110) speed = 110; // 最高速度制限
-        speedDisp.innerText = Math.floor(speed);
-
-        // --- 音響処理部 ---
-        const now = audioCtx.currentTime;
-        const volBase = document.getElementById('vol').value;
-
-        if (speed > 0.1) {
-            // 加速時(P)は少し音を大きく、それ以外は控えめに
-            let currentVol = (notch > 0) ? volBase * 0.4 : volBase * 0.15;
-            gainNode.gain.setTargetAtTime(currentVol, now, 0.1);
-
-            // モーター回転音
-            motorOsc.frequency.setTargetAtTime(speed * 3.8 + 15, now, 0.1);
-
-            // SiCインバータ音の変遷（4000系風）
-            let sicFreq = 1200;
-            if (speed < 20) sicFreq = 1100 + (speed * 30);
-            else if (speed < 50) sicFreq = 1700 + (speed * 10);
-            else sicFreq = 2200 + (speed * 5);
-            
-            sicOsc.frequency.setTargetAtTime(sicFreq, now, 0.1);
-        } else {
-            gainNode.gain.setTargetAtTime(0, now, 0.1);
-        }
-    }, 50);
-</script>
-
+        freqSlider.addEventListener('input', () => {
+            const val = freqSlider.value;
+            freqVal.textContent = val;
+            if (oscillator) {
+                oscillator.frequency.setValueAtTime(val, audioCtx.currentTime);
+            }
+        });
+    </script>
 </body>
 </html>
