@@ -2,123 +2,126 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>垂直衝撃 & リアル火災報知器</title>
+    <title>ATS統合シミュレーター</title>
     <style>
         body { 
-            background: #111; color: #000; font-family: 'Helvetica Neue', Arial, sans-serif;
+            background: #111; color: #000; font-family: 'MS Gothic', sans-serif;
             margin: 0; overflow-x: auto; overflow-y: hidden; white-space: nowrap;
         }
         .stage-container { display: inline-flex; height: 100vh; align-items: center; padding: 0 50vw; }
         
         .panel { 
             display: inline-block; background: #ffcc00; padding: 40px; border: 10px solid #000; 
-            box-shadow: 20px 20px 0 #444; width: 350px; vertical-align: middle; 
+            box-shadow: 20px 20px 0 #444; width: 380px; vertical-align: middle; 
             white-space: normal; margin: 0 100px;
         }
 
-        h1 { font-size: 1.8rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-        .danger-stripes { height: 20px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 10px; }
+        h1 { font-size: 1.8rem; border-bottom: 5px solid #000; padding-bottom: 10px; margin-bottom: 20px; text-align: center;}
+        .danger-stripes { height: 25px; background: repeating-linear-gradient(45deg, #000, #000 10px, #ffcc00 10px, #ffcc00 20px); margin-bottom: 10px; }
 
         .btn-group { display: flex; flex-direction: column; gap: 15px; }
-        button { padding: 25px; font-size: 1.5rem; font-weight: bold; cursor: pointer; border: 5px solid #000; transition: 0.1s; }
         
-        #startBtn { background: #00ff00; }
-        #alarmBtn { background: #d00; color: #fff; text-shadow: 0 0 10px #fff; }
-        #alarmBtn.active { animation: blink-red 0.1s infinite; }
+        /* 統合起動ボタン */
+        #masterStart { background: #00ff00; padding: 30px; font-size: 2rem; border: 5px solid #000; font-weight: bold; cursor: pointer; }
+        #masterStart.active { animation: blink-green 0.5s infinite; background: #fff; }
         
-        @keyframes blink-red { 0% { background: #d00; } 50% { background: #ff5555; } 100% { background: #d00; } }
+        /* 停止ボタン */
+        #emergencyStop { background: #ff0000; color: #fff; padding: 20px; font-size: 1.5rem; border: 5px solid #000; cursor: pointer; margin-top: 10px; }
 
-        #stopBtn, #stopAlarmBtn { background: #fff; }
+        @keyframes blink-green { 0% { background: #00ff00; } 50% { background: #adff2f; } 100% { background: #00ff00; } }
 
-        .hex-bg { 
-            font-size: 0.8rem; background: #000; color: #ffcc00; padding: 10px; 
-            margin-top: 15px; border: 2px dashed #ffcc00;
-        }
+        .status-window { background: #000; color: #0f0; padding: 15px; font-family: monospace; margin: 15px 0; border: 2px solid #555; }
+        .hex-id { font-size: 0.7rem; color: #888; text-align: right; }
     </style>
 </head>
 <body>
 
     <div class="stage-container">
+        
         <div class="panel">
             <div class="danger-stripes"></div>
-            <h1>垂直射出・最強</h1>
-            <div class="hex-bg">AREA: HEX-CORE [CENTER]</div>
+            <h1>ATS 統合制御システム</h1>
+            <div class="status-window" id="display">SYSTEM READY...</div>
+            
             <div class="btn-group">
-                <button id="startBtn">連射開始</button>
-                <button id="stopBtn">停止</button>
+                <button id="masterStart">シミュレーター起動</button>
+                <button id="emergencyStop">一括停止（復帰）</button>
             </div>
+            
+            <div class="hex-id">HEX-CORE / ATS-P CONNECTED</div>
         </div>
 
         <div class="panel">
             <div class="danger-stripes"></div>
             <h1 style="color: #d00;">非常警報【極】</h1>
-            <div class="hex-bg">AREA: HEX-EXTERNAL [RIGHT]</div>
-            <p>※実物のベルを凌駕する超リアル衝撃波</p>
-            <div class="btn-group">
-                <button id="alarmBtn">警報発令</button>
-                <button id="stopAlarmBtn">警報停止</button>
-            </div>
+            <p>※ATSとは別系統の独立回路</p>
+            <button id="alarmBtn" style="width:100%; padding:40px; background:#d00; color:#fff; font-size:2rem; border:5px solid #000; cursor:pointer;">警報発令</button>
+            <div class="hex-id" style="margin-top:20px;">EXTERNAL-NODE</div>
         </div>
+
     </div>
 
     <script>
         let audioCtx;
-        let fireInterval;
+        let atsInterval;
         let isRunning = false;
 
         const setupAudio = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         };
 
-        // --- 垂直衝撃 (30Hz上下優先) ---
-        document.getElementById('startBtn').onclick = () => {
+        const masterStart = document.getElementById('masterStart');
+        const display = document.getElementById('display');
+
+        // 統合起動ボタン
+        masterStart.onclick = () => {
             setupAudio();
             if (isRunning) return;
             isRunning = true;
-            fireInterval = setInterval(() => {
-                const period = Math.floor(audioCtx.sampleRate / 25);
-                const buffer = audioCtx.createBuffer(1, period, audioCtx.sampleRate);
+            masterStart.classList.add('active');
+            display.textContent = "ATS RUNNING: キンコン... \nVERTICAL: STANDBY";
+
+            let step = 0;
+            atsInterval = setInterval(() => {
+                const sampleRate = audioCtx.sampleRate;
+                // ATS音 (キン=780Hz, コン=650Hz)
+                const freq = (step % 2 === 0) ? 780 : 650;
+                const buffer = audioCtx.createBuffer(1, sampleRate * 0.2, sampleRate);
                 const data = buffer.getChannelData(0);
-                const pullEnd = Math.floor(period * 0.8);
-                for (let i = 0; i < period; i++) data[i] = (i < pullEnd) ? -1.0 : 1.0;
-                playBuffer(buffer, 600);
-            }, 40);
+
+                for (let i = 0; i < buffer.length; i++) {
+                    const env = Math.exp(-i / (sampleRate * 0.08));
+                    // 物理打撃を強めるためのサイン波 + 矩形波のミックス
+                    const wave = Math.sin(2 * Math.PI * freq * (i / sampleRate));
+                    data[i] = wave * env;
+                }
+                
+                playBuffer(buffer, 450); // ATSのリズムで垂直にノック
+                step++;
+            }, 600);
         };
 
-        // --- 特級・火災報知器 (リアル・ベル・ストライク) ---
+        // 一括停止
+        document.getElementById('emergencyStop').onclick = () => {
+            isRunning = false;
+            clearInterval(atsInterval);
+            masterStart.classList.remove('active');
+            display.textContent = "SYSTEM READY...";
+        };
+
+        // 火災報知器 (独立)
         document.getElementById('alarmBtn').onclick = () => {
             setupAudio();
-            if (isRunning) return;
-            isRunning = true;
-            document.getElementById('alarmBtn').classList.add('active');
-
-            fireInterval = setInterval(() => {
-                // 打撃一回分のバッファ
-                const sampleRate = audioCtx.sampleRate;
-                const duration = sampleRate * 0.05; // 50msの衝撃
-                const buffer = audioCtx.createBuffer(1, duration, sampleRate);
+            // 既存の音を止めずに重ねる
+            setInterval(() => {
+                const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
                 const data = buffer.getChannelData(0);
-
-                for (let i = 0; i < duration; i++) {
-                    // 1. 低域の「ガッ」という物理打撃
-                    const impact = Math.exp(-i / 500) * (i % 2 === 0 ? 1 : -1);
-                    // 2. 高域の「キーン」というベルの金属共鳴 (3000Hz)
-                    const ringing = Math.sin(2 * Math.PI * 3000 * (i / sampleRate)) * Math.exp(-i / 1500);
-                    
-                    data[i] = (impact * 0.7) + (ringing * 0.3);
+                for (let i = 0; i < buffer.length; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / 1000);
                 }
-                playBuffer(buffer, 400);
-            }, 60); // 1秒間に約16回のリアルな打撃間隔
+                playBuffer(buffer, 300);
+            }, 60);
         };
-
-        const stopAll = () => {
-            isRunning = false;
-            clearInterval(fireInterval);
-            document.getElementById('alarmBtn').classList.remove('active');
-        };
-
-        document.getElementById('stopBtn').onclick = stopAll;
-        document.getElementById('stopAlarmBtn').onclick = stopAll;
 
         function playBuffer(buffer, gainVal) {
             const source = audioCtx.createBufferSource();
