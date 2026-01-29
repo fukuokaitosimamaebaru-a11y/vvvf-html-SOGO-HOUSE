@@ -27,7 +27,7 @@
         </div>
         <div class="status" id="stat">STATUS: NORMAL</div>
         <div class="btn-group">
-            <button id="atsBtn" class="btn-ats">ATS作動 (ジリリリ)</button>
+            <button id="atsBtn" class="btn-ats">ATS作動 (動画再現)</button>
             <button id="doorBtn" class="btn-door">戸締め (テゥンテゥーン)</button>
             <button id="hornBtn" class="btn-horn">警笛 (空気笛再現)</button>
             <button id="stopBtn" style="background: #fff;">ATS確認 (復帰)</button>
@@ -44,132 +44,11 @@
             if (audioCtx.state === 'suspended') audioCtx.resume();
         };
 
-        // --- ATS 極限物理再現ロジック ---
+        // --- 究極再現：JR西日本風「ピピッ・ピピッ」ロジック ---
         function runAts() {
-            let t = 0;
             const lamp = document.getElementById('atsLamp');
             const stat = document.getElementById('stat');
+            stat.textContent = "STATUS: ATS ALARM!!";
 
             intervals.ats = setInterval(() => {
-                const now = audioCtx.currentTime;
-                
-                if (t < 35) { // 最初：物理ベル「ジリリリ！」
-                    stat.textContent = "STATUS: ATS ALARM!!";
-                    lamp.classList.toggle('red');
-
-                    // 5層の倍音を重ねて金属打撃をシミュレート
-                    [1102, 1108, 1215, 1222, 1350].forEach((f, i) => {
-                        const osc = audioCtx.createOscillator();
-                        const g = audioCtx.createGain();
-                        osc.type = i % 2 === 0 ? 'sawtooth' : 'triangle';
-                        osc.frequency.setValueAtTime(f + (Math.random() * 10 - 5), now);
-                        g.gain.setValueAtTime(0.04, now);
-                        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
-                        osc.connect(g); g.connect(audioCtx.destination);
-                        osc.start(now); osc.stop(now + 0.08);
-                    });
-                } else { // 後半：電子チャイム「キンコン」
-                    stat.textContent = "STATUS: ATS CHIME";
-                    lamp.classList.add('red');
-                    
-                    // インターバル再設定（チャイムの周期に合わせる）
-                    if (t === 35) {
-                        clearInterval(intervals.ats);
-                        intervals.ats = setInterval(runChime, 450);
-                    }
-                }
-                t++;
-            }, 85);
-        }
-
-        function runChime() {
-            const now = audioCtx.currentTime;
-            const isHigh = (Math.floor(now * 2.2) % 2 === 0);
-            const freq = isHigh ? 1318.5 : 1046.5; 
-
-            const osc = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            const filter = audioCtx.createBiquadFilter();
-
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, now);
-            filter.type = 'bandpass';
-            filter.frequency.value = freq;
-            filter.Q.value = 2.0; // 響きの芯を強化
-
-            g.gain.setValueAtTime(0, now);
-            g.gain.linearRampToValueAtTime(0.06, now + 0.02);
-            g.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
-
-            osc.connect(filter); filter.connect(g); g.connect(audioCtx.destination);
-            osc.start(now); osc.stop(now + 0.8);
-        }
-
-        document.getElementById('atsBtn').onclick = () => {
-            setupAudio();
-            if (intervals.ats) return;
-            runAts();
-        };
-
-        // --- 戸締めチャイム (JR標準) ---
-        document.getElementById('doorBtn').onclick = () => {
-            setupAudio();
-            if (intervals.door) return;
-            intervals.door = setInterval(() => {
-                const now = audioCtx.currentTime;
-                [[1046, 0], [1318, 0.12]].forEach(([f, delay]) => {
-                    const osc = audioCtx.createOscillator();
-                    const g = audioCtx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(f, now + delay);
-                    g.gain.setValueAtTime(0.05, now + delay);
-                    g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.6);
-                    osc.connect(g); g.connect(audioCtx.destination);
-                    osc.start(now + delay); osc.stop(now + delay + 0.6);
-                });
-            }, 850);
-        };
-
-        // --- 警笛 (空気笛の唸り再現) ---
-        const startHorn = (e) => {
-            e.preventDefault(); setupAudio();
-            if (hornNodes) return;
-            const now = audioCtx.currentTime;
-            const g = audioCtx.createGain();
-            g.gain.setValueAtTime(0, now);
-            g.gain.linearRampToValueAtTime(0.06, now + 0.05);
-            const oscs = [659, 661, 880, 882].map(f => {
-                const osc = audioCtx.createOscillator();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(f, now);
-                osc.connect(g); osc.start();
-                return osc;
-            });
-            g.connect(audioCtx.destination);
-            hornNodes = { oscs, g };
-        };
-
-        const stopHorn = () => {
-            if (!hornNodes) return;
-            const now = audioCtx.currentTime;
-            hornNodes.g.gain.cancelScheduledValues(now);
-            hornNodes.g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-            const old = hornNodes;
-            setTimeout(() => old.oscs.forEach(o => o.stop()), 200);
-            hornNodes = null;
-        };
-
-        const hBtn = document.getElementById('hornBtn');
-        hBtn.onmousedown = startHorn; hBtn.onmouseup = stopHorn; hBtn.onmouseleave = stopHorn;
-        hBtn.ontouchstart = startHorn; hBtn.ontouchend = stopHorn;
-
-        // --- 復帰 ---
-        document.getElementById('stopBtn').onclick = () => {
-            clearInterval(intervals.ats); clearInterval(intervals.door);
-            intervals.ats = null; intervals.door = null;
-            document.getElementById('atsLamp').classList.remove('red');
-            document.getElementById('stat').textContent = "STATUS: NORMAL";
-        };
-    </script>
-</body>
-</html>
+                const now =
