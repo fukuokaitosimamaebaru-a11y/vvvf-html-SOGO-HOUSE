@@ -2,130 +2,126 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>VVVF インバータ音シミュレーター</title>
+    <title>爆音VVVFプロトタイプ</title>
     <style>
-        body { background: #222; color: #fff; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        .panel { border: 2px solid #555; display: inline-block; padding: 20px; border-radius: 15px; background: #333; }
-        .speed-display { font-size: 48px; font-family: 'Courier New', monospace; color: #0f0; margin: 20px; }
-        button { padding: 15px 30px; font-size: 20px; cursor: pointer; margin: 10px; border-radius: 10px; border: none; }
-        .accel { background: #d44; color: white; }
-        .brake { background: #44d; color: white; }
-        .stop { background: #777; color: white; }
-        .info { font-size: 12px; color: #aaa; margin-top: 20px; }
+        body { background: #000; color: #0f0; font-family: 'Courier New', monospace; text-align: center; padding: 20px; }
+        .box { border: 3px solid #0f0; padding: 20px; display: inline-block; border-radius: 10px; background: #111; }
+        .meter { font-size: 60px; margin: 20px; text-shadow: 0 0 10px #0f0; }
+        button { 
+            width: 250px; height: 60px; font-size: 20px; font-weight: bold; 
+            margin: 10px; cursor: pointer; border-radius: 10px; border: 2px solid #0f0;
+            background: #222; color: #0f0;
+        }
+        button:active { background: #0f0; color: #000; }
+        .warn { color: #ff0000; font-size: 14px; margin-top: 10px; }
+        input[type="range"] { width: 80%; }
     </style>
 </head>
 <body>
 
-<div class="panel">
-    <h2>VVVF Simulator</h2>
-    <div class="speed-display"><span id="speed">0</span> km/h</div>
+<div class="box">
+    <h1>VVVF ENGINE v2</h1>
     
-    <button class="accel" onmousedown="startAccel()" onmouseup="stopControl()" onmouseleave="stopControl()">加速 (Master Controller)</button><br>
-    <button class="brake" onmousedown="startBrake()" onmouseup="stopControl()" onmouseleave="stopControl()">減速 (Brake)</button><br>
-    <button class="stop" onclick="emergencyStop()">非常停止</button>
+    <button id="unlockBtn" style="background: #f00; color: #fff;">1. UNLOCK AUDIO (まず押す)</button>
+    <br>
+    
+    <div class="meter"><span id="speed">000</span> km/h</div>
 
-    <div class="info">
-        ※ 音量にご注意ください。<br>
-        加速ボタンを押し続けると、周波数が段階的に変化します。
+    <button id="accelBtn">加速 (ACCEL)</button><br>
+    <button id="brakeBtn">減速 (BRAKE)</button><br>
+    
+    <div>
+        <label>MASTER VOLUME (注意)</label><br>
+        <input type="range" id="volRange" min="0" max="2" step="0.1" value="0.5">
     </div>
+
+    <div class="warn">※OS側の音量設定も確認してください</div>
 </div>
 
 <script>
     let audioCtx = null;
-    let mainOsc = null; // 非同期音（モーターの唸り）
-    let carrierOsc = null; // キャリア音（キーンという音）
+    let mainOsc = null;
+    let carrierOsc = null;
     let gainNode = null;
-    
     let speed = 0;
-    let timer = null;
-    let isRunning = false;
+    let isAccelerating = false;
+    let isBraking = false;
 
-    function initAudio() {
+    // 初期化関数
+    function init() {
         if (audioCtx) return;
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         gainNode = audioCtx.createGain();
         gainNode.connect(audioCtx.destination);
+        
+        // オシレーター準備
+        mainOsc = audioCtx.createOscillator();
+        mainOsc.type = 'sawtooth'; // 唸り音
+        
+        carrierOsc = audioCtx.createOscillator();
+        carrierOsc.type = 'square'; // 矩形波（より攻撃的な音）
+        
+        mainOsc.connect(gainNode);
+        carrierOsc.connect(gainNode);
+        
+        mainOsc.start();
+        carrierOsc.start();
         gainNode.gain.value = 0;
+        
+        document.getElementById('unlockBtn').textContent = "READY (OK)";
+        document.getElementById('unlockBtn').style.background = "#004400";
     }
 
-    function updateSound(s) {
+    // ロック解除ボタン
+    document.getElementById('unlockBtn').addEventListener('click', () => {
+        init();
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    });
+
+    // 加速・減速のイベント（スマホ対応）
+    const accelBtn = document.getElementById('accelBtn');
+    const brakeBtn = document.getElementById('brakeBtn');
+
+    const startAccel = () => { isAccelerating = true; };
+    const stopAccel = () => { isAccelerating = false; };
+    const startBrake = () => { isBraking = true; };
+    const stopBrake = () => { isBraking = false; };
+
+    accelBtn.onmousedown = startAccel; accelBtn.onmouseup = stopAccel; accelBtn.ontouchstart = startAccel; accelBtn.ontouchend = stopAccel;
+    brakeBtn.onmousedown = startBrake; brakeBtn.onmouseup = stopBrake; brakeBtn.ontouchstart = startBrake; brakeBtn.ontouchend = stopBrake;
+
+    // メインループ
+    setInterval(() => {
         if (!audioCtx) return;
 
-        // --- モーターの根本音 (速度に比例) ---
-        if (!mainOsc) {
-            mainOsc = audioCtx.createOscillator();
-            mainOsc.type = 'sawtooth';
-            mainOsc.connect(gainNode);
-            mainOsc.start();
-        }
-        mainOsc.frequency.setTargetAtTime(s * 1.5 + 10, audioCtx.currentTime, 0.1);
+        if (isAccelerating) speed = Math.min(speed + 0.8, 120);
+        if (isBraking) speed = Math.max(speed - 1.2, 0);
 
-        // --- VVVFキャリア音 (段階的に切り替え) ---
-        if (!carrierOsc) {
-            carrierOsc = audioCtx.createOscillator();
-            carrierOsc.type = 'sine';
-            carrierOsc.connect(gainNode);
-            carrierOsc.start();
-        }
+        document.getElementById('speed').innerText = Math.floor(speed).toString().padStart(3, '0');
 
-        let carrierFreq = 0;
-        
-        // シーメンス GTOやIGBTをイメージした簡易的な音階切り替え
-        if (s < 5) {
-            carrierFreq = 500; // 発車時
-        } else if (s < 15) {
-            carrierFreq = 700; // 非同期領域
-        } else if (s < 25) {
-            carrierFreq = 1100; // パルスモード切替 1
-        } else if (s < 40) {
-            carrierFreq = 1600; // パルスモード切替 2
-        } else if (s < 60) {
-            carrierFreq = 2500; // 高速域
+        // 音の調整
+        if (speed > 0) {
+            let masterVol = document.getElementById('volRange').value;
+            gainNode.gain.setTargetAtTime(masterVol, audioCtx.currentTime, 0.05);
+            
+            // モーター音
+            mainOsc.frequency.setTargetAtTime(speed * 2 + 20, audioCtx.currentTime, 0.05);
+            
+            // VVVFキャリア音 (もっと複雑に動かす)
+            let carrierFreq = 300;
+            if (speed < 10) carrierFreq = 400 + speed * 20;
+            else if (speed < 30) carrierFreq = 800;
+            else if (speed < 50) carrierFreq = 1200;
+            else carrierFreq = 2000 + (speed * 5);
+            
+            carrierOsc.frequency.setTargetAtTime(carrierFreq, audioCtx.currentTime, 0.05);
         } else {
-            carrierFreq = 3500 + (s * 5); // 高速域の伸び
+            gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
         }
-
-        carrierOsc.frequency.setTargetAtTime(carrierFreq, audioCtx.currentTime, 0.05);
-
-        // 全体の音量調整（速度が上がると少し大きく、停止時は無音）
-        let targetGain = s > 0 ? 0.15 : 0;
-        gainNode.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.1);
-    }
-
-    function startAccel() {
-        initAudio();
-        clearInterval(timer);
-        timer = setInterval(() => {
-            if (speed < 120) {
-                speed += 0.5;
-                document.getElementById('speed').innerText = Math.floor(speed);
-                updateSound(speed);
-            }
-        }, 50);
-    }
-
-    function startBrake() {
-        clearInterval(timer);
-        timer = setInterval(() => {
-            if (speed > 0) {
-                speed -= 0.8;
-                if (speed < 0) speed = 0;
-                document.getElementById('speed').innerText = Math.floor(speed);
-                updateSound(speed);
-            }
-        }, 50);
-    }
-
-    function stopControl() {
-        clearInterval(timer);
-    }
-
-    function emergencyStop() {
-        clearInterval(timer);
-        speed = 0;
-        document.getElementById('speed').innerText = "0";
-        if (gainNode) gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
-    }
+    }, 50);
 </script>
+
 </body>
 </html>
