@@ -2,49 +2,48 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>PULL & PUSH CANNON</title>
+    <title>30Hz IMPACT CANNON</title>
     <style>
-        body { background: #000; color: #0f0; text-align: center; font-family: 'Arial Black', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .cannon-frame { border: 10px double #0f0; padding: 40px; border-radius: 20px; box-shadow: 0 0 30px #0f0; }
-        .fire-btn { 
-            width: 200px; height: 200px; border-radius: 50%; border: none;
-            background: #0f0; color: #000; font-size: 2.5rem; font-weight: bold;
-            cursor: pointer; box-shadow: 0 0 20px #0f0;
+        body { background: #000; color: #fff; text-align: center; font-family: 'Impact', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .module { border: 5px solid #ff00ff; padding: 50px; background: rgba(255,0,255,0.1); box-shadow: 0 0 50px #ff00ff; }
+        .trigger-btn { 
+            width: 200px; height: 200px; border-radius: 20px; border: none;
+            background: #ff00ff; color: #000; font-size: 3rem; font-weight: bold;
+            cursor: pointer; box-shadow: 0 10px 0 #808;
         }
-        .fire-btn:active { transform: scale(0.8); background: #fff; }
-        #indicator { margin-top: 20px; font-size: 1.5rem; height: 1.5rem; }
+        .trigger-btn:active { transform: translateY(10px); box-shadow: none; filter: brightness(1.5); }
+        #status { margin-bottom: 20px; font-size: 1.5rem; color: #ff00ff; text-shadow: 0 0 10px #ff00ff; }
     </style>
 </head>
 <body>
 
-    <div class="cannon-frame">
-        <div id="indicator">READY</div>
-        <button class="fire-btn" id="fireBtn">PUSH</button>
+    <div class="module">
+        <div id="status">30Hz PHASE READY</div>
+        <button class="trigger-btn" id="fireBtn">爆</button>
     </div>
 
     <script>
         let audioCtx;
         const btn = document.getElementById('fireBtn');
-        const indicator = document.getElementById('indicator');
+        const status = document.getElementById('status');
 
         btn.onclick = () => {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             
-            // 物理衝撃プロセッサ
-            const bufferSize = audioCtx.sampleRate * 0.2;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            // 30Hzの1周期分(約0.033秒)のバッファを作成
+            const sampleRate = audioCtx.sampleRate;
+            const periodSamples = Math.floor(sampleRate / 30); 
+            const buffer = audioCtx.createBuffer(1, periodSamples, sampleRate);
             const data = buffer.getChannelData(0);
 
-            // 1. 「引き」のフェーズ (コーンを奥へ)
-            const pullDuration = 2000; // サンプル数
-            for (let i = 0; i < pullDuration; i++) {
+            // 【超・往復動作】
+            // 最初の半分(16ms)で最大まで引き込み
+            const half = Math.floor(periodSamples / 2);
+            for (let i = 0; i < half; i++) {
                 data[i] = -1.0; 
             }
-
-            // 2. 「押し」のフェーズ (一気に射出)
-            const pushStart = pullDuration;
-            const pushDuration = 500; 
-            for (let i = pushStart; i < pushStart + pushDuration; i++) {
+            // 後半の半分(16ms)で最大まで突き上げ
+            for (let i = half; i < periodSamples; i++) {
                 data[i] = 1.0; 
             }
 
@@ -52,25 +51,17 @@
             source.buffer = buffer;
             const gain = audioCtx.createGain();
 
-            // 外部スピーカーを無理やり動かすための過剰ゲイン
-            gain.gain.setValueAtTime(100.0, audioCtx.currentTime); 
+            // ゲインを限界（さらに倍）まで引き上げ
+            gain.gain.setValueAtTime(150.0, audioCtx.currentTime); 
 
             source.connect(gain);
             gain.connect(audioCtx.destination);
 
             source.start();
 
-            // アニメーション演出
-            indicator.textContent = "PULLING...";
-            indicator.style.color = "#f00";
-            setTimeout(() => {
-                indicator.textContent = "PUSH!!!";
-                indicator.style.color = "#fff";
-                setTimeout(() => {
-                    indicator.textContent = "READY";
-                    indicator.style.color = "#0f0";
-                }, 200);
-            }, 50);
+            // 演出
+            status.textContent = "IMPACT!!";
+            setTimeout(() => { status.textContent = "30Hz PHASE READY"; }, 500);
         };
     </script>
 </body>
